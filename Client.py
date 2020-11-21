@@ -2,7 +2,9 @@ import os
 import socket
 import struct
 import math
+import time
 from uzol import Uzol
+from utils import CheckSumError
 
 
 class Client(Uzol):
@@ -28,13 +30,21 @@ class Client(Uzol):
         pass
 
     def nadviaz_spojenie(self):
-        self.send_simple("SYN", self.target)
-        self.recv_simple(("SYN", "ACK"), self.recv_buffer)
-        self.send_simple("ACK", self.target)
+        self.sock.settimeout(2)
+        try:
+            self.send_simple("SYN", self.target)
+            self.recv_simple(("SYN", "ACK"), self.recv_buffer)
+            self.send_simple("ACK", self.target)
+        except CheckSumError:
+            print("Poskodeny packet, chyba pri nadviazani spojenia")
+        except socket.timeout:
+            print("Cas vyprsal")
 
     def send(self):
         self.nadviaz_spojenie()
+
         if self.odosielane_data["TYP"] == "subor":
             self.send_subor()
         else:
             self.send_sprava()
+        self.sock.close()
