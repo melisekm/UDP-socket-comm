@@ -9,8 +9,15 @@ class Crc:
     def calculate_crc(self, data):
         return hex(self.crc_func(data))
 
+    def check_crc(self, sender_chksum, data):
+        return self.crc_func(data[:-2]) == sender_chksum
+
 
 class Constants:
     def __init__(self):
         with open("constants.json", "r") as file:
             self.types = json.load(file)
+
+
+class CheckSumError(Exception):
+    pass
