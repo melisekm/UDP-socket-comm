@@ -37,11 +37,12 @@ if __name__ == "__main__":
         client.send()
     """
     # """
-    ip = "127.0.0.1"
-    port = 5005
+    ip = "localhost"
+    port = 5006
     max_fragment_size = 1468
+    input()
     odosielane_data = ("subor", "kjut.png")
 
-    client = Client(crc.calculate_crc, constants, (ip, port), max_fragment_size, odosielane_data)
+    client = Client(crc, constants, (ip, port), max_fragment_size, odosielane_data)
     client.send()
     # """
