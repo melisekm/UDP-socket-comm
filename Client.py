@@ -1,47 +1,41 @@
+import os
 import socket
 import struct
-import os
 import math
-import crcmod
 
 
 class Client:
-    def __init__(self):
-        UDP_IP = "192.168.100.20"
-        UDP_PORT = 5008
-        # MESSAGE =  input("Vasa sprava: ")
-        buf = 2000
-        file_name = input("Nazov suboru: ")
-        fileSize = os.stat(file_name).st_size
-        print("velkost suboru: " + str(fileSize))
-        pocetFragmentov = math.ceil(fileSize / buf)
-        print(f"pocet fragmentov{pocetFragmentov}: ")
-        typ = b"1"
-        crc16_func = crcmod.mkCrcFun(0x18005, initCrc=0, xorOut=0x0000)
+    def __init__(self, crc, constants, adresa, max_fragment_size, odosielane_data):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet  # UDP
+        self.crc = crc
+        self.constants = constants
+        self.target = {
+            "IP": adresa[0],
+            "PORT": adresa[1],
+        }
+        self.buffer = max_fragment_size
+        self.odosielane_data = {
+            "TYP": odosielane_data[0],
+            "DATA": odosielane_data[1],
+        }
+        if self.odosielane_data["TYP"] == "subor":
+            self.file_size = os.stat(self.odosielane_data["DATA"]).st_size
+            self.pocet_fragmentov = math.ceil(self.file_size / self.buffer)
+        else:
+            self.pocet_fragmentov = math.ceil(len(self.odosielane_data["DATA"] / self.buffer))
 
-        # header = "1"
-        addr = (UDP_IP, UDP_PORT)
+    def send_subor(self):
+        pass
 
-        print("UDP target IP: %s" % UDP_IP)
-        print("UDP target port: %s" % UDP_PORT)
-        # print("message: %s" % MESSAGE)
+    def send_sprava(self):
+        pass
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet  # UDP
-        encodedData = file_name.encode("utf-8")
-        chksum = crc16_func(encodedData)
-        header = struct.pack("=cH", typ, chksum)
-        data = header + encodedData
+    def nadviaz_spojenie(self):
+        pass
 
-        s.sendto(data, addr)
-
-        f = open(file_name, "rb")
-        data = f.read(buf)
-        cntr = 1
-        while data:
-            if s.sendto(data, addr):
-                print("sending ..." + str(cntr) + "/" + str(pocetFragmentov))
-                data = f.read(buf)
-                cntr += 1
-        s.close()
-        f.close()
-        print("Finished..")
+    def send(self):
+        self.nadviaz_spojenie()
+        if self.odosielane_data["TYP"] == "subor":
+            self.send_subor()
+        else:
+            self.send_sprava()
