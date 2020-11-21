@@ -1,5 +1,6 @@
 import struct
 import socket
+import random
 from utils import CheckSumError
 
 
@@ -39,12 +40,12 @@ class Uzol:
     def recv_simple(self, typ, buffer):
         typ = (typ,)
         data, addr = self.sock.recvfrom(buffer)
-        unpacked = struct.unpack("=cH", data)
-        if not self.crc.check(unpacked[0], unpacked[1]):
-            raise CheckSumError
-        types = self.get_type(unpacked[0])
         if self.target is None:
             self.target = addr
+        unpacked = struct.unpack("=cH", data)
+        types = self.get_type(unpacked[0])
+        if not self.crc.check(unpacked[0], unpacked[1]):
+            raise CheckSumError
 
         if typ in types:
             return True

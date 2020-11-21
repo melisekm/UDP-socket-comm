@@ -37,8 +37,8 @@ if __name__ == "__main__":
         client.send()
     """
     # """
-    ip = "localhost"
-    port = 5006
+    ip = "192.168.100.10"
+    port = 5010
     max_fragment_size = 1468
     input()
     odosielane_data = ("subor", "kjut.png")
