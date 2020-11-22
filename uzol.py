@@ -50,3 +50,15 @@ class Uzol:
         if typ in types:
             return True
         return False
+
+    def send_data(self, typ, hdr_info, hdr_struct, raw_data):
+        if raw_data is None:
+            raw_data = ""
+        header = []
+        header.append(self.vytvor_type(typ))
+        header.append(hdr_info)
+        packed_hdr = struct.pack(hdr_struct, header[0], header[1])
+        data = packed_hdr + raw_data.encode()
+        chksum = struct.pack("=H", self.crc.calculate(data))
+        data_packed = data + chksum
+        self.sock.sendto(data_packed, self.target)
