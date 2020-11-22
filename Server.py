@@ -40,7 +40,7 @@ class Server(Uzol):
 
         bad_count = len(corrupted_ids)
         print(f"Je potrebne si vyziadat: {bad_count} fragmentov")
-        print(f"Ich ID su:{corrupted_ids}")
+        print(f"Ich ID su:{[x+1 for x in corrupted_ids]}")
 
         self.send_nack(corrupted_ids)
 
@@ -59,7 +59,6 @@ class Server(Uzol):
             f_info.good_block_len += 1  # OK V BLOKU
             print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{self.pocet_fragmentov}")
             recvd_good += 1
-        # self.send_simple("ACK", self.target)
         return block_data
 
     def skontroluj_block(self, f_info, output):
@@ -80,7 +79,6 @@ class Server(Uzol):
             output = open("server/" + self.nazov_suboru, "wb")
         else:
             output = ""
-        self.sock.settimeout(10)
         f_info = FragmentInfo(self.pocet_fragmentov, self.posielane_size)
 
         while f_info.good_fragments != self.pocet_fragmentov:
@@ -88,7 +86,6 @@ class Server(Uzol):
                 data = self.sock.recvfrom(self.buffer)[0]
                 sender_chksum = struct.unpack("=H", data[-2:])[0]
                 if not self.crc.check(data[:-2], sender_chksum):
-                    # print(data)
                     print(f"NESEDI CHECKSUM v {f_info.block_counter+1}/{self.posielane_size}.")
 
                 else:
@@ -104,7 +101,9 @@ class Server(Uzol):
                 print(f"Cas vyprsal pri fragmentID:{f_info.block_counter}")
                 print(f"Celkovo:{f_info.good_fragments}/{self.pocet_fragmentov}")
                 try:
+                    f_info.timeout = True
                     self.skontroluj_block(f_info, output)
+                    f_info.timeout = False
                 except socket.timeout:
                     print("Vyprsal cas pri opatovnom ziadani.")
                     raise
@@ -118,14 +117,22 @@ class Server(Uzol):
     # TODOdorobit daj mu sancu este ak pride zly
     def recv_info(self):
         try:
-            data = self.sock.recvfrom(self.buffer)[0]
-            sender_chksum = struct.unpack("=H", data[-2:])[0]
-            if not self.crc.check(data[:-2], sender_chksum):
-                raise CheckSumError("CheckSum error pri RECV INFO")
-            unpacked_hdr = struct.unpack("=ci", data[:5])
-            types = self.get_type(unpacked_hdr[0])
-            print(f"PRIJAL:{types[0]}")
-            self.pocet_fragmentov = unpacked_hdr[1]
+            while True:
+                data = self.sock.recvfrom(self.buffer)[0]
+                sender_chksum = struct.unpack("=H", data[-2:])[0]
+                if not self.crc.check(data[:-2], sender_chksum):
+                    raise CheckSumError("CheckSum error pri RECV INFO")
+                unpacked_hdr = struct.unpack("=c", data[:1])[0]
+                types = self.get_type(unpacked_hdr)
+                if "INIT" in types:
+                    break
+                if "KA" in types:
+                    self.send_simple("ACK", self.target)
+                elif "FIN" in types:
+                    self.send_simple("ACK", self.target)
+                    return 0  # error code
+            self.sock.settimeout(2)
+            self.pocet_fragmentov = struct.unpack("=i", data[1:5])[0]
             print(f"POCET:FRAGMENTOV:{self.pocet_fragmentov}")
 
             if "DF" in types:
@@ -147,7 +154,7 @@ class Server(Uzol):
     def nadviaz_spojenie(self):
         try:
             self.recv_simple("SYN", self.buffer)
-            self.sock.settimeout(10)
+            self.sock.settimeout(2)
             self.send_simple(("SYN", "ACK"), self.target)
             self.recv_simple("ACK", self.buffer)
         except CheckSumError as e:
@@ -161,8 +168,13 @@ class Server(Uzol):
     def listen(self):
         try:
             self.nadviaz_spojenie()
-            self.recv_info()
-            self.recv_data()
+            while True:
+                if self.recv_info() == 0:
+                    break
+                self.recv_data()
+                print("Prechadzam do passive modu.")
+                self.sock.settimeout(60)
+
         except CheckSumError as e:
             print(e.msg)
             print("Poskodeny packet.")
