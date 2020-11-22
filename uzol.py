@@ -11,16 +11,17 @@ class Uzol:
         self.crc = crc
         self.constants = constants
         self.target = None
+        self.posielane_size = 10
 
     def vytvor_type(self, vstup):
+        if not isinstance(vstup, tuple):
+            vstup = (vstup,)
         result = 0
         for typ in vstup:
             result |= self.constants.types[typ]
         return bytes([result])
 
     def send_simple(self, typ, target):
-        if not isinstance(typ, tuple):
-            typ = (typ,)
         hdr = self.vytvor_type(typ)
         chksum = self.crc.calculate(hdr)
         packed = struct.pack("=cH", hdr, chksum)
@@ -45,7 +46,7 @@ class Uzol:
         unpacked = struct.unpack("=cH", data)
         types = self.get_type(unpacked[0])
         if not self.crc.check(unpacked[0], unpacked[1]):
-            raise CheckSumError
+            raise CheckSumError(f"CHKSUM Chyba pri{types[0]}")
 
         if typ in types:
             return True
@@ -54,11 +55,15 @@ class Uzol:
     def send_data(self, typ, hdr_info, hdr_struct, raw_data):
         if raw_data is None:
             raw_data = ""
+        if not isinstance(raw_data, bytes):
+            raw_data = raw_data.encode()
         header = []
         header.append(self.vytvor_type(typ))
         header.append(hdr_info)
         packed_hdr = struct.pack(hdr_struct, header[0], header[1])
-        data = packed_hdr + raw_data.encode()
+        data = packed_hdr + raw_data
         chksum = struct.pack("=H", self.crc.calculate(data))
         data_packed = data + chksum
+        # print(data_packed)
+        # print("NEW")
         self.sock.sendto(data_packed, self.target)

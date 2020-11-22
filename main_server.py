@@ -22,7 +22,7 @@ if __name__ == "__main__":
         server = Server(crc.calculate_crc, constants, port)
         server.listen()
     """
-    port = 5010
+    port = 5013
     input()
     server = Server(crc, constants, port)
     server.listen()
