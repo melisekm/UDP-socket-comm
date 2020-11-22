@@ -16,10 +16,10 @@ class Server(Uzol):
         self.typ_dat = None
 
     def recv_fragment(self, data, block_data):
-        unpacked_hdr = struct.unpack("=cH", data[:3])
+        unpacked_hdr = struct.unpack("=cc", data[:2])
         # Type kontrola?
-        fragment_id = unpacked_hdr[1]
-        raw_data = data[3:-2]
+        fragment_id = unpacked_hdr[1][0]
+        raw_data = data[2:-2]
         block_data[fragment_id] = raw_data
         print(f"Fragment: {fragment_id + 1}/{self.posielane_size} prisiel v poriadku.")
 
@@ -173,7 +173,7 @@ class Server(Uzol):
                     break
                 self.recv_data()
                 print("Prechadzam do passive modu.")
-                self.sock.settimeout(60)
+                self.sock.settimeout(60)  # vypni len ak nepride KA
 
         except CheckSumError as e:
             print(e.msg)

@@ -40,7 +40,7 @@ if __name__ == "__main__":
     ip = "localhost"
     port = 5015
     max_fragment_size = 1468
-    chyba = 0
+    chyba = 50
     input()
     odosielane_data = ("subor", "kjut.png")
 
