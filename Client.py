@@ -8,11 +8,12 @@ from utils import CheckSumError
 
 
 class Client(Uzol):
-    def __init__(self, crc, constants, adresa, max_fragment_size, odosielane_data):
+    def __init__(self, crc, constants, adresa, max_fragment_size, odosielane_data, chyba):
         super().__init__(crc, constants)
         self.target = adresa
         self.send_buffer = max_fragment_size
         self.recv_buffer = 1500
+        self.constants.CHYBA = chyba
         self.odosielane_data = {
             "TYP": odosielane_data[0],
             "DATA": odosielane_data[1],
@@ -29,7 +30,7 @@ class Client(Uzol):
         else:
             data = None
         typ = ("INIT", typ)
-        self.send_data(typ, self.pocet_fragmentov, "=ci", data)
+        self.send_data(typ, self.pocet_fragmentov, "=ci", data, self.constants.BEZ_CHYBY)
 
         try:
             self.recv_simple("ACK", self.recv_buffer)
@@ -48,7 +49,7 @@ class Client(Uzol):
                 res[bit] = 1
         return res, size
 
-    def recv_data_confirmation(self, block_data):
+    def recv_data_confirmation(self, block_data, total_cntr):
         data = self.sock.recvfrom(self.recv_buffer)[0]
         sender_chksum = struct.unpack("=H", data[-2:])[0]
         if not self.crc.check(data[:-2], sender_chksum):
@@ -62,12 +63,19 @@ class Client(Uzol):
         if "NACK" in types:
             unpacked_ids = struct.unpack("=H", data[1:3])[0]
             corrupted_ids, bad_count = self.get_corrupted_ids(unpacked_ids)
-            ids = [x for x in corrupted_ids if x is not None]
+            print(f"ID CORUPTED PACKETOV: {corrupted_ids}, pocet:{bad_count}")
+            total_cntr -= bad_count
+            ids = [i for i, x in enumerate(corrupted_ids) if x is not None]
+            print(f"ids:{ids}")
             sent_good = 0
             while sent_good != bad_count:
-                self.send_data("DF", ids[sent_good], "=cH", block_data[ids[sent_good]])
+                print(f"Opatovne Posielam block_id:{ids[sent_good]}/9.")
+                self.send_data(
+                    "DF", ids[sent_good], "=cH", block_data[ids[sent_good]], self.constants.BEZ_CHYBY
+                )
                 sent_good += 1
-                time.sleep(0.5)
+                total_cntr += 1
+                # time.sleep(0.5)
             try:
                 self.recv_simple("ACK", self.recv_buffer)
             except CheckSumError:
@@ -79,16 +87,19 @@ class Client(Uzol):
         self.send_info("DF")
         file = open(self.odosielane_data["DATA"], "rb")
         raw_data = file.read(self.send_buffer)
-        total_cntr = 1
+        total_cntr = 0
         block_id = 0
         block_data = []
-        while raw_data:
-            if block_id == 10:
-                self.recv_data_confirmation(block_data)
+        while True:
+            if block_id == 10 or total_cntr == self.pocet_fragmentov:
+                self.recv_data_confirmation(block_data, total_cntr)
                 block_id = 0
-            print(f"Posielam block_id:{block_id + 1}/10.")
-            print(f"Celkovo je to {total_cntr}/{self.pocet_fragmentov}")
-            self.send_data("DF", block_id, "=cH", raw_data)
+                block_data = []
+                if total_cntr == self.pocet_fragmentov:
+                    break
+            print(f"Posielam block_id:{block_id}/9.")
+            print(f"Celkovo je to {total_cntr}/{self.pocet_fragmentov-1}")
+            self.send_data("DF", block_id, "=cH", raw_data, self.constants.CHYBA)
 
             block_data.append(raw_data)
             raw_data = file.read(self.send_buffer)
@@ -114,14 +125,15 @@ class Client(Uzol):
             print("Cas vyprsal pri inicializacii")
 
     def send(self):
-        self.sock.settimeout(20)
+        self.sock.settimeout(60)
         self.nadviaz_spojenie()
         try:
             if self.odosielane_data["TYP"] == "subor":
                 self.send_subor()
             else:
                 self.send_sprava()
-        except CheckSumError:
+        except CheckSumError as e:
+            print(e.msg)
             print("CHKSUM ERROR pri odosielani dat.")
         except socket.timeout:
             print("Cas vyprsal pri odosielani dat.")

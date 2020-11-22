@@ -52,16 +52,21 @@ class Uzol:
             return True
         return False
 
-    def send_data(self, typ, hdr_info, hdr_struct, raw_data):
+    def send_data(self, typ, hdr_info, hdr_struct, raw_data, chyba):
+        pokaz_checksum = 0
         if raw_data is None:
             raw_data = ""
         if not isinstance(raw_data, bytes):
             raw_data = raw_data.encode()
+        if chyba:
+            pokaz_checksum = random.randint(0, 100) < 25
         header = []
         header.append(self.vytvor_type(typ))
         header.append(hdr_info)
         packed_hdr = struct.pack(hdr_struct, header[0], header[1])
         data = packed_hdr + raw_data
         chksum = struct.pack("=H", self.crc.calculate(data))
+        if pokaz_checksum:
+            chksum = struct.pack("=H", 0)
         data_packed = data + chksum
         self.sock.sendto(data_packed, self.target)
