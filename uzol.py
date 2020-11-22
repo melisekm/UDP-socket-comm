@@ -59,7 +59,7 @@ class Uzol:
         if not isinstance(raw_data, bytes):
             raw_data = raw_data.encode()
         if chyba:
-            pokaz_checksum = random.randint(0, 100) < 25
+            pokaz_checksum = random.randint(0, 100) < 50
         header = []
         header.append(self.vytvor_type(typ))
         header.append(hdr_info)
