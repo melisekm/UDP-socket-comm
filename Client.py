@@ -23,10 +23,31 @@ class Client(Uzol):
         else:
             self.pocet_fragmentov = math.ceil(len(self.odosielane_data["DATA"] / self.send_buffer))
 
+    def send_info(self, typ):
+        header = []
+        header.append(self.vytvor_type(("INIT", typ)))
+        header.append(self.pocet_fragmentov)
+        packed_hdr = struct.pack("=ci", header[0], header[1])
+        data = packed_hdr
+        if typ == "DF":
+            data += self.odosielane_data["DATA"].encode()
+        chksum = struct.pack("=H", self.crc.calculate(data))
+        data_packed = data + chksum
+        self.sock.sendto(data_packed, self.target)
+        try:
+            self.recv_simple("ACK", self.recv_buffer)
+        except CheckSumError:
+            # TODO RIES
+            print("Poskodeny packet, chyba pri init sprave ACK")
+        except socket.timeout:
+            print("Cas vyprsal pri info pkt ACK")
+
     def send_subor(self):
+        self.send_info("DF")
         pass
 
     def send_sprava(self):
+        self.send_info("DM")
         pass
 
     def nadviaz_spojenie(self):
@@ -38,11 +59,10 @@ class Client(Uzol):
         except CheckSumError:
             print("Poskodeny packet, chyba pri nadviazani spojenia")
         except socket.timeout:
-            print("Cas vyprsal")
+            print("Cas vyprsal pri inicializacii")
 
     def send(self):
         self.nadviaz_spojenie()
-
         if self.odosielane_data["TYP"] == "subor":
             self.send_subor()
         else:
