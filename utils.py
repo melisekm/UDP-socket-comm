@@ -21,3 +21,35 @@ class Constants:
 
 class CheckSumError(Exception):
     pass
+
+
+class FragmentInfo:
+    def __init__(self, pocet_fragmentov, posielane_size):
+        self.good_fragments = 0
+        self.good_block_len = 0
+        self.block_counter = 0
+        self.block_data = [None * posielane_size]
+        self.posledny_block_size = pocet_fragmentov // posielane_size
+
+    def reset(self, posielane_size):
+        self.good_block_len = 0
+        self.block_counter = 0
+        self.block_data = [None * posielane_size]
+
+    def posledny_block(self, pocet_fragmentov):
+        return (
+            self.good_fragments > pocet_fragmentov - self.posledny_block_size
+            and self.block_counter == self.posledny_block_size
+        )
+
+    def check_block(self, pocet_fragmentov, posielane_size):
+        dopln, zapis = 0, 0
+        if self.posledny_block(pocet_fragmentov):
+            zapis = 1
+            if self.good_block_len != self.posledny_block_size:
+                dopln = 1
+        elif self.block_counter == posielane_size:
+            zapis = 1
+            if self.good_block_len != posielane_size:
+                dopln = 1
+        return (zapis, dopln)

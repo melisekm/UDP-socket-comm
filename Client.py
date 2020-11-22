@@ -23,23 +23,13 @@ class Client(Uzol):
         else:
             self.pocet_fragmentov = math.ceil(len(self.odosielane_data["DATA"] / self.send_buffer))
 
-    def send_data(self, typ, hdr_info, hdr_size, raw_data):
-        header = []
-        header.append(self.vytvor_type(typ))
-        header.append(hdr_info)
-        packed_hdr = struct.pack(hdr_size, header[0], header[1])
-        data = packed_hdr + raw_data.encode()
-        chksum = struct.pack("=H", self.crc.calculate(data))
-        data_packed = data + chksum
-        self.sock.sendto(data_packed, self.target)
-
     def send_info(self, typ):
         # self.send_fragment(typ,self.pocet_fragmentov,data )
         typ = ("INIT", typ)
         if typ == "DF":
             data = self.odosielane_data["DATA"].encode()
         else:
-            data = ""
+            data = None
         self.send_data(typ, self.pocet_fragmentov, "=ci", data)
 
         try:
@@ -58,15 +48,16 @@ class Client(Uzol):
         file = open(self.odosielane_data["DATA"])
         raw_data = file.read(self.send_buffer)
         total_cntr = 1
-        block_cntr = 0
+        block_id = 0
         block_data = []
         while raw_data:
-            if block_cntr == 10:
+            if block_id == 10:
                 self.recv_data_confirmation(block_data)
-            self.send_data("DF", block_cntr, "=cH", raw_data)
+            self.send_data("DF", block_id, "=cH", raw_data)
+
             block_data.append(raw_data)
             raw_data = file.read(self.send_buffer)
-            block_cntr += 1
+            block_id += 1
             total_cntr += 1
 
         file.close()

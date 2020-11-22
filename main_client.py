@@ -37,7 +37,7 @@ if __name__ == "__main__":
         client.send()
     """
     # """
-    ip = "192.168.100.10"
+    ip = "localhost"
     port = 5010
     max_fragment_size = 1468
     input()
