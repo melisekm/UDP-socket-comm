@@ -1,4 +1,5 @@
 import json
+import math
 import crcmod
 
 
@@ -31,7 +32,7 @@ class FragmentInfo:
         self.good_block_len = 0
         self.block_counter = 0
         self.block_data = [None] * posielane_size
-        self.posledny_block_size = pocet_fragmentov // posielane_size
+        self.posledny_block_size = math.ceil(pocet_fragmentov % posielane_size)
 
     def reset(self, posielane_size):
         self.good_block_len = 0
@@ -51,10 +52,9 @@ class FragmentInfo:
             if self.good_block_len != self.posledny_block_size:
                 dopln = 1
             return (zapis, dopln)
-            
-        if self.good_block_len != posielane_size:
-            dopln = 1
 
         if self.block_counter == posielane_size:
             zapis = 1
+            if self.good_block_len != posielane_size:
+                dopln = 1
         return (zapis, dopln)

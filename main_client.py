@@ -38,8 +38,8 @@ if __name__ == "__main__":
     """
     # """
     ip = "localhost"
-    port = 5013
-    max_fragment_size = 1468
+    port = 5014
+    max_fragment_size = 1
     input()
     odosielane_data = ("subor", "kjut.png")
 

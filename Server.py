@@ -21,7 +21,7 @@ class Server(Uzol):
         fragment_id = unpacked_hdr[1]
         raw_data = data[3:-2]
         block_data[fragment_id] = raw_data
-        print(f"Fragment: {fragment_id}/10 prisiel v poriadku.")
+        print(f"Fragment: {fragment_id + 1}/10 prisiel v poriadku.")
 
     def send_nack(self, corrupted_ids):
         data = 0
@@ -64,8 +64,8 @@ class Server(Uzol):
 
         if zapis:
             print("Koniec bloku, zapisujem data")
-            f_info.reset(self.posielane_size)
             zapis_data(self.typ_dat, output, f_info.block_data)
+            f_info.reset(self.posielane_size)
             self.send_simple("ACK", self.target)
 
     def recv_data(self):
@@ -84,17 +84,19 @@ class Server(Uzol):
                     print(data)
                     print(f"NESEDI CHECKSUM v {f_info.block_counter}/10.")
                     f_info.block_counter += 1
+                    if f_info.block_counter == self.posielane_size:
+                        self.skontroluj_block(f_info, output)
                     continue
 
                 self.recv_fragment(data, f_info.block_data)
-                print(f"Celkovo dostal:{f_info.good_fragments}/{self.pocet_fragmentov}")
+                print(f"Celkovo dostal:{f_info.good_fragments + 1}/{self.pocet_fragmentov}")
 
-                f_info.good_fragments += 1
-                f_info.good_block_len += 1
+                f_info.good_fragments += 1  # VSETKY
+                f_info.good_block_len += 1  # OK V BLOKU
+                f_info.block_counter += 1  # CELKOVO V BLOKU
 
                 self.skontroluj_block(f_info, output)
 
-                f_info.block_counter += 1
             except socket.timeout:
                 print(f"Cas vyprsal pri fragmentID:{f_info.block_counter}")
                 print(f"Celkovo:{f_info.good_fragments}/{self.pocet_fragmentov}")
@@ -167,6 +169,8 @@ class Server(Uzol):
 def zapis_data(typ_dat, output, block_data):
     if typ_dat == "F":
         for data in block_data:
+            if data is None:
+                break
             output.write(data)
     else:
         output += block_data
