@@ -42,7 +42,7 @@ if __name__ == "__main__":
     max_fragment_size = 1468
     chyba = True
     input()
-    odosielane_data = ("subor", "kjut.png")
+    odosielane_data = ("subor", "text.txt")
 
     client = Client(crc, constants, (ip, port), max_fragment_size, odosielane_data, chyba)
     client.send()

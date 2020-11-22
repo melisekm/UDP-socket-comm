@@ -21,7 +21,7 @@ class Server(Uzol):
         fragment_id = unpacked_hdr[1]
         raw_data = data[3:-2]
         block_data[fragment_id] = raw_data
-        print(f"Fragment: {fragment_id}/9 prisiel v poriadku.")
+        print(f"Fragment: {fragment_id + 1}/{self.posielane_size} prisiel v poriadku.")
 
     def send_nack(self, corrupted_ids):
         data = 0
@@ -57,7 +57,7 @@ class Server(Uzol):
 
             f_info.good_fragments += 1  # VSETKY
             f_info.good_block_len += 1  # OK V BLOKU
-            print(f"Celkovo dostal:{f_info.good_fragments}/{self.pocet_fragmentov-1}")
+            print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{self.pocet_fragmentov}")
             recvd_good += 1
         # self.send_simple("ACK", self.target)
         return block_data
@@ -89,24 +89,20 @@ class Server(Uzol):
                 sender_chksum = struct.unpack("=H", data[-2:])[0]
                 if not self.crc.check(data[:-2], sender_chksum):
                     # print(data)
-                    print(f"NESEDI CHECKSUM v {f_info.block_counter}/9.")
-                    f_info.block_counter += 1
-                    if f_info.block_counter == self.posielane_size:
-                        self.skontroluj_block(f_info, output)
-                    continue
+                    print(f"NESEDI CHECKSUM v {f_info.block_counter+1}/{self.posielane_size}.")
 
-                self.recv_fragment(data, f_info.block_data)
-                print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{self.pocet_fragmentov-1}")
+                else:
+                    self.recv_fragment(data, f_info.block_data)
+                    f_info.good_fragments += 1  # VSETKY
+                    f_info.good_block_len += 1  # OK V BLOKU
+                    print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{self.pocet_fragmentov}")
 
-                f_info.good_fragments += 1  # VSETKY
-                f_info.good_block_len += 1  # OK V BLOKU
                 f_info.block_counter += 1  # CELKOVO V BLOKU
-
                 self.skontroluj_block(f_info, output)
 
             except socket.timeout:
                 print(f"Cas vyprsal pri fragmentID:{f_info.block_counter}")
-                print(f"Celkovo:{f_info.good_fragments}/{self.pocet_fragmentov-1}")
+                print(f"Celkovo:{f_info.good_fragments}/{self.pocet_fragmentov}")
                 try:
                     self.skontroluj_block(f_info, output)
                 except socket.timeout:
@@ -128,7 +124,7 @@ class Server(Uzol):
                 raise CheckSumError("CheckSum error pri RECV INFO")
             unpacked_hdr = struct.unpack("=ci", data[:5])
             types = self.get_type(unpacked_hdr[0])
-
+            print(f"PRIJAL:{types[0]}")
             self.pocet_fragmentov = unpacked_hdr[1]
             print(f"POCET:FRAGMENTOV:{self.pocet_fragmentov}")
 

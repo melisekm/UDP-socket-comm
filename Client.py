@@ -30,6 +30,7 @@ class Client(Uzol):
         else:
             data = None
         typ = ("INIT", typ)
+        print("POSLAL:INIT")
         self.send_data(typ, self.pocet_fragmentov, "=ci", data, self.constants.BEZ_CHYBY)
 
         try:
@@ -69,7 +70,7 @@ class Client(Uzol):
             print(f"ids:{ids}")
             sent_good = 0
             while sent_good != bad_count:
-                print(f"Opatovne Posielam block_id:{ids[sent_good]}/9.")
+                print(f"Opatovne Posielam block_id:{ids[sent_good]}/{self.posielane_size}.")
                 self.send_data(
                     "DF", ids[sent_good], "=cH", block_data[ids[sent_good]], self.constants.BEZ_CHYBY
                 )
@@ -97,14 +98,14 @@ class Client(Uzol):
                 block_data = []
                 if total_cntr == self.pocet_fragmentov:
                     break
-            print(f"Posielam block_id:{block_id}/9.")
-            print(f"Celkovo je to {total_cntr}/{self.pocet_fragmentov-1}")
+            print(f"Posielam block_id:{block_id+1}/{self.posielane_size}.")
             self.send_data("DF", block_id, "=cH", raw_data, self.constants.CHYBA)
 
             block_data.append(raw_data)
             raw_data = file.read(self.send_buffer)
             block_id += 1
             total_cntr += 1
+            print(f"Celkovo je to {total_cntr}/{self.pocet_fragmentov}")
         # tu bude nameisto tohto este FIN
         print("Subor uspesne odoslany.")
         time.sleep(5)
