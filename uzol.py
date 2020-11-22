@@ -64,6 +64,4 @@ class Uzol:
         data = packed_hdr + raw_data
         chksum = struct.pack("=H", self.crc.calculate(data))
         data_packed = data + chksum
-        # print(data_packed)
-        # print("NEW")
         self.sock.sendto(data_packed, self.target)

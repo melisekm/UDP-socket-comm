@@ -57,6 +57,7 @@ class Client(Uzol):
         unpacked_typ = struct.unpack("=c", data[:1])[0]
         types = self.get_type(unpacked_typ)
         if "ACK" in types:
+            print("Block potvrdeny.")
             return
         if "NACK" in types:
             unpacked_ids = struct.unpack("=H", data[1:3])[0]
@@ -85,13 +86,17 @@ class Client(Uzol):
             if block_id == 10:
                 self.recv_data_confirmation(block_data)
                 block_id = 0
+            print(f"Posielam block_id:{block_id + 1}/10.")
+            print(f"Celkovo je to {total_cntr}/{self.pocet_fragmentov}")
             self.send_data("DF", block_id, "=cH", raw_data)
 
             block_data.append(raw_data)
             raw_data = file.read(self.send_buffer)
             block_id += 1
             total_cntr += 1
-
+        # tu bude nameisto tohto este FIN
+        print("Subor uspesne odoslany.")
+        time.sleep(5)
         file.close()
 
     def send_sprava(self):
