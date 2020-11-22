@@ -64,13 +64,15 @@ class Client(Uzol):
         if "NACK" in types:
             unpacked_ids = struct.unpack("=H", data[1:3])[0]
             corrupted_ids, bad_count = self.get_corrupted_ids(unpacked_ids)
-            print(f"ID CORUPTED PACKETOV: {corrupted_ids}, pocet:{bad_count}")
+            print(
+                f"ID CORUPTED PACKETOV: {[i+1 for i,x in enumerate(corrupted_ids) if x is not None]}, pocet:{bad_count}"
+            )
             total_cntr -= bad_count
             ids = [i for i, x in enumerate(corrupted_ids) if x is not None]
-            print(f"ids:{ids}")
+            # print(f"ids:{ids}")
             sent_good = 0
             while sent_good != bad_count:
-                print(f"Opatovne Posielam block_id:{ids[sent_good]}/{self.posielane_size}.")
+                print(f"Opatovne Posielam block_id:{ids[sent_good]+1}/{self.posielane_size}.")
                 self.send_data(
                     "DF", ids[sent_good], "=cH", block_data[ids[sent_good]], self.constants.BEZ_CHYBY
                 )
@@ -87,11 +89,11 @@ class Client(Uzol):
     def send_subor(self):
         self.send_info("DF")
         file = open(self.odosielane_data["DATA"], "rb")
-        raw_data = file.read(self.send_buffer)
         total_cntr = 0
         block_id = 0
         block_data = []
         while True:
+            raw_data = file.read(self.send_buffer)
             if block_id == 10 or total_cntr == self.pocet_fragmentov:
                 self.recv_data_confirmation(block_data, total_cntr)
                 block_id = 0
@@ -99,16 +101,20 @@ class Client(Uzol):
                 if total_cntr == self.pocet_fragmentov:
                     break
             print(f"Posielam block_id:{block_id+1}/{self.posielane_size}.")
-            self.send_data("DF", block_id, "=cH", raw_data, self.constants.CHYBA)
-
+            self.send_data("DF", block_id, "=cH", raw_data, self.constants.BEZ_CHYBY)
+            """
+            if total_cntr % 2 != 0:
+                if self.pocet_fragmentov - total_cntr <= 5:
+                    self.send_data("DF", block_id, "=cH", raw_data, 100)
+                else:
+                    self.send_data("DF", block_id, "=cH", raw_data, self.constants.BEZ_CHYBY)
+            """
             block_data.append(raw_data)
-            raw_data = file.read(self.send_buffer)
             block_id += 1
             total_cntr += 1
             print(f"Celkovo je to {total_cntr}/{self.pocet_fragmentov}")
-        # tu bude nameisto tohto este FIN
+
         print("Subor uspesne odoslany.")
-        time.sleep(5)
         file.close()
 
     def send_sprava(self):
@@ -128,14 +134,25 @@ class Client(Uzol):
     def send(self):
         self.sock.settimeout(60)
         self.nadviaz_spojenie()
+        # spusti KA.
         try:
-            if self.odosielane_data["TYP"] == "subor":
-                self.send_subor()
-            else:
-                self.send_sprava()
+            while True:
+                if self.odosielane_data["TYP"] == "subor":
+                    self.send_subor()
+                else:
+                    self.send_sprava()
+                vstup = input("[Rovnaky] target/[quit]")
+                if vstup.lower() == "quit":
+                    self.send_simple("FIN", self.target)
+                    self.recv_simple("ACK", self.recv_buffer)  # je mozne riesit dalej
+                    break
+                elif vstup.lower() == "rovnaky":
+                    # zadajte odosielane data:
+                    input()
         except CheckSumError as e:
             print(e.msg)
             print("CHKSUM ERROR pri odosielani dat.")
         except socket.timeout:
             print("Cas vyprsal pri odosielani dat.")
+
         self.sock.close()

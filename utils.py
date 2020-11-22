@@ -16,8 +16,8 @@ class Crc:
 
 class Constants:
     def __init__(self):
-        self.CHYBA = True
-        self.BEZ_CHYBY = False
+        self.CHYBA = 50
+        self.BEZ_CHYBY = 0
         with open("constants.json", "r") as file:
             self.types = json.load(file)
 
@@ -36,6 +36,7 @@ class FragmentInfo:
         self.block_data = [None] * posielane_size
         self.posledny_block_size = math.ceil(pocet_fragmentov % posielane_size)
         self.DOPLN_POSLEDNY = 2
+        self.timeout = False
 
     def reset(self, posielane_size):
         self.good_block_len = 0
@@ -43,9 +44,9 @@ class FragmentInfo:
         self.block_data = [None] * posielane_size
 
     def posledny_block(self, pocet_fragmentov):
-        return (
-            self.good_fragments > pocet_fragmentov - self.posledny_block_size
-            and self.block_counter == self.posledny_block_size
+        # prva cast ci je to posledny block, druha cast ci je to posledny pkt v bloku ALEBO nastal timeout
+        return self.good_fragments >= pocet_fragmentov - self.posledny_block_size and (
+            (self.block_counter == self.posledny_block_size) or self.timeout
         )
 
     def check_block(self, pocet_fragmentov, posielane_size):
@@ -58,7 +59,7 @@ class FragmentInfo:
                 print("Treba doplnit z posledneho blocku")
             return (zapis, dopln)
 
-        if self.block_counter == posielane_size:
+        if self.block_counter == posielane_size or self.timeout:
             zapis = 1
             if self.good_block_len != posielane_size:
                 dopln = 1
