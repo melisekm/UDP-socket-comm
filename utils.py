@@ -20,7 +20,9 @@ class Constants:
 
 
 class CheckSumError(Exception):
-    pass
+    def __init__(self, msg):
+        self.msg = msg
+        super().__init__(msg)
 
 
 class FragmentInfo:
@@ -28,13 +30,13 @@ class FragmentInfo:
         self.good_fragments = 0
         self.good_block_len = 0
         self.block_counter = 0
-        self.block_data = [None * posielane_size]
+        self.block_data = [None] * posielane_size
         self.posledny_block_size = pocet_fragmentov // posielane_size
 
     def reset(self, posielane_size):
         self.good_block_len = 0
         self.block_counter = 0
-        self.block_data = [None * posielane_size]
+        self.block_data = [None] * posielane_size
 
     def posledny_block(self, pocet_fragmentov):
         return (
@@ -48,8 +50,11 @@ class FragmentInfo:
             zapis = 1
             if self.good_block_len != self.posledny_block_size:
                 dopln = 1
-        elif self.block_counter == posielane_size:
+            return (zapis, dopln)
+            
+        if self.good_block_len != posielane_size:
+            dopln = 1
+
+        if self.block_counter == posielane_size:
             zapis = 1
-            if self.good_block_len != posielane_size:
-                dopln = 1
         return (zapis, dopln)
