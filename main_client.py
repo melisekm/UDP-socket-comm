@@ -38,11 +38,12 @@ if __name__ == "__main__":
     """
     # """
     ip = "localhost"
-    port = 5014
-    max_fragment_size = 1
+    port = 5015
+    max_fragment_size = 1468
+    chyba = True
     input()
     odosielane_data = ("subor", "kjut.png")
 
-    client = Client(crc, constants, (ip, port), max_fragment_size, odosielane_data)
+    client = Client(crc, constants, (ip, port), max_fragment_size, odosielane_data, chyba)
     client.send()
     # """
