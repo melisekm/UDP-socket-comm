@@ -14,7 +14,27 @@ class Server(Uzol):
         self.pocet_fragmentov = None
         self.nazov_suboru = None
 
-    # dorobit daj mu sancu este ak pride zly
+    def recv_data(self):
+        file = open("server/" + self.nazov_suboru)
+        good_fragments = 0
+        block_counter = 0
+        while good_fragments != self.pocet_fragmentov:
+            data = self.sock.recvfrom(self.buffer)[0]
+            sender_chksum = struct.unpack("=H", data[-2:])[0]
+            if not self.crc.check(data[:-2], sender_chksum):
+                # TODO
+                pass
+            unpacked_hdr = struct.unpack("=cH", data[:3])
+            types = self.get_type(unpacked_hdr[0])
+            fragment_id = unpacked_hdr[1]
+            raw_data = data[3:-2].decode()
+            if block_counter == 10:
+                # send daco
+                pass
+            # TODO POKRACOVAT vo vyvoji odoslatia suboru ACK NACK, bloky funkcie!!
+        file.close()
+
+    # TODOdorobit daj mu sancu este ak pride zly
     def recv_info(self):
         try:
             data = self.sock.recvfrom(self.buffer)[0]
@@ -52,4 +72,5 @@ class Server(Uzol):
     def listen(self):
         self.nadviaz_spojenie()
         self.recv_info()
+        self.recv_data()
         self.sock.close()

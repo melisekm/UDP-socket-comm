@@ -1,0 +1,6 @@
+pred spusetnim:
+inicializovanie oboch tried, server a client, constanty, crc
+
+ak posielam subor po init sprave sa opytaj 
+
+padding???

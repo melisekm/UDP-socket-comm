@@ -23,17 +23,25 @@ class Client(Uzol):
         else:
             self.pocet_fragmentov = math.ceil(len(self.odosielane_data["DATA"] / self.send_buffer))
 
-    def send_info(self, typ):
+    def send_data(self, typ, hdr_info, hdr_size, raw_data):
         header = []
-        header.append(self.vytvor_type(("INIT", typ)))
-        header.append(self.pocet_fragmentov)
-        packed_hdr = struct.pack("=ci", header[0], header[1])
-        data = packed_hdr
-        if typ == "DF":
-            data += self.odosielane_data["DATA"].encode()
+        header.append(self.vytvor_type(typ))
+        header.append(hdr_info)
+        packed_hdr = struct.pack(hdr_size, header[0], header[1])
+        data = packed_hdr + raw_data.encode()
         chksum = struct.pack("=H", self.crc.calculate(data))
         data_packed = data + chksum
         self.sock.sendto(data_packed, self.target)
+
+    def send_info(self, typ):
+        # self.send_fragment(typ,self.pocet_fragmentov,data )
+        typ = ("INIT", typ)
+        if typ == "DF":
+            data = self.odosielane_data["DATA"].encode()
+        else:
+            data = ""
+        self.send_data(typ, self.pocet_fragmentov, "=ci", data)
+
         try:
             self.recv_simple("ACK", self.recv_buffer)
         except CheckSumError:
@@ -42,9 +50,26 @@ class Client(Uzol):
         except socket.timeout:
             print("Cas vyprsal pri info pkt ACK")
 
+    def recv_data_confirmation(self, block_data):
+        pass
+
     def send_subor(self):
         self.send_info("DF")
-        pass
+        file = open(self.odosielane_data["DATA"])
+        raw_data = file.read(self.send_buffer)
+        total_cntr = 1
+        block_cntr = 0
+        block_data = []
+        while raw_data:
+            if block_cntr == 10:
+                self.recv_data_confirmation(block_data)
+            self.send_data("DF", block_cntr, "=cH", raw_data)
+            block_data.append(raw_data)
+            raw_data = file.read(self.send_buffer)
+            block_cntr += 1
+            total_cntr += 1
+
+        file.close()
 
     def send_sprava(self):
         self.send_info("DM")
