@@ -1,6 +1,5 @@
 import struct
 import socket
-import time
 from uzol import Uzol
 from utils import CheckSumError
 
@@ -12,6 +11,32 @@ class Server(Uzol):
         self.crc = crc
         self.constants = constants
         self.buffer = 1500
+        self.pocet_fragmentov = None
+        self.nazov_suboru = None
+
+    # dorobit daj mu sancu este ak pride zly
+    def recv_info(self):
+        try:
+            data = self.sock.recvfrom(self.buffer)[0]
+            sender_chksum = struct.unpack("=H", data[-2:])[0]
+            if not self.crc.check(data[:-2], sender_chksum):
+                raise CheckSumError
+            unpacked_hdr = struct.unpack("=ci", data[:5])
+            types = self.get_type(unpacked_hdr[0])
+
+            self.pocet_fragmentov = unpacked_hdr[1]
+            print(f"POCET:FRAGMENTOV:{self.pocet_fragmentov}")
+
+            if "DF" in types:
+                self.nazov_suboru = data[5:-2].decode()
+                print(f"NAZOV SUBORU:{self.nazov_suboru}")
+            self.send_simple("ACK", self.target)
+
+        except CheckSumError:
+            # dorobit ?RIES
+            print("Poskodeny packet, chyba pri init sprave INIT")
+        except socket.timeout:
+            print("Cas vyprsal pri info pkt INIT")
 
     def nadviaz_spojenie(self):
         try:
@@ -22,7 +47,9 @@ class Server(Uzol):
         except CheckSumError:
             print("Poskodeny packet, chyba pri nadviazani spojenia")
         except socket.timeout:
-            print("Cas vyprsal")
+            print("Cas vyprsal pri inicializacii")
 
     def listen(self):
         self.nadviaz_spojenie()
+        self.recv_info()
+        self.sock.close()
