@@ -74,7 +74,11 @@ class Client(Uzol):
             while sent_good != bad_count:
                 print(f"Opatovne Posielam block_id:{ids[sent_good]+1}/{self.posielane_size}.")
                 self.send_data(
-                    "DF", ids[sent_good], "=cH", block_data[ids[sent_good]], self.constants.BEZ_CHYBY
+                    "DF",
+                    bytes([ids[sent_good]]),
+                    "=cc",
+                    block_data[ids[sent_good]],
+                    self.constants.BEZ_CHYBY,
                 )
                 sent_good += 1
                 total_cntr += 1
@@ -101,14 +105,14 @@ class Client(Uzol):
                 if total_cntr == self.pocet_fragmentov:
                     break
             print(f"Posielam block_id:{block_id+1}/{self.posielane_size}.")
-            self.send_data("DF", block_id, "=cH", raw_data, self.constants.BEZ_CHYBY)
-            """
+            # self.send_data("DF", bytes([block_id]), "=cc", raw_data, self.constants.BEZ_CHYBY)
+
             if total_cntr % 2 != 0:
                 if self.pocet_fragmentov - total_cntr <= 5:
-                    self.send_data("DF", block_id, "=cH", raw_data, 100)
+                    self.send_data("DF", bytes([block_id]), "=cc", raw_data, 100)
                 else:
-                    self.send_data("DF", block_id, "=cH", raw_data, self.constants.BEZ_CHYBY)
-            """
+                    self.send_data("DF", bytes([block_id]), "=cc", raw_data, self.constants.BEZ_CHYBY)
+
             block_data.append(raw_data)
             block_id += 1
             total_cntr += 1
@@ -147,7 +151,8 @@ class Client(Uzol):
                     self.recv_simple("ACK", self.recv_buffer)  # je mozne riesit dalej
                     break
                 elif vstup.lower() == "rovnaky":
-                    # zadajte odosielane data:
+                    # spusti KA
+                    # zadajte odosielane data: pokial je vtomto menu posielaj KA
                     input()
         except CheckSumError as e:
             print(e.msg)
