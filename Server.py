@@ -1,3 +1,4 @@
+import os
 import struct
 import socket
 from uzol import Uzol
@@ -14,7 +15,20 @@ class Server(Uzol):
         self.buffer = 1500
         self.pocet_fragmentov = None
         self.nazov_suboru = None
-        self.typ_dat = None
+        self.typ_dat = None  # typ prijatych dat
+        self.output = None  # predstavuje subor aj prijatu spravu
+
+    def zapis_data(self, typ_dat, block_data):
+        if typ_dat == "DF":
+            for data in block_data:
+                if data is None:
+                    break
+                self.output.write(data)
+        else:
+            for data in block_data:
+                if data is None:
+                    break
+                self.output += data.decode()
 
     def recv_fragment(self, data, block_data):
         unpacked_hdr = struct.unpack("=cc", data[:2])  # Tuple, 0je type, 1,fragment id
@@ -62,7 +76,7 @@ class Server(Uzol):
             recvd_good += 1
         return block_data
 
-    def skontroluj_block(self, f_info, output):
+    def skontroluj_block(self, f_info):
         zapis, dopln = f_info.check_block(self.pocet_fragmentov, self.velkost_bloku)
         if dopln:
             print("Je potrebne doplnit data\n")
@@ -71,15 +85,15 @@ class Server(Uzol):
 
         if zapis:
             print("Koniec bloku, zapisujem data\n")
-            zapis_data(self.typ_dat, output, f_info.block_data)
+            self.zapis_data(self.typ_dat, f_info.block_data)
             f_info.reset(self.velkost_bloku)
             self.send_simple("ACK", self.target)
 
     def recv_data(self):
-        if self.typ_dat == "F":
-            output = open("server/" + self.nazov_suboru, "wb")
+        if self.typ_dat == "DF":
+            self.output = open("downloads/" + self.nazov_suboru, "wb")
         else:
-            output = ""
+            self.output = ""
         f_info = FragmentInfo(self.pocet_fragmentov, self.velkost_bloku)
 
         while f_info.good_fragments != self.pocet_fragmentov:
@@ -96,24 +110,25 @@ class Server(Uzol):
                     print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{self.pocet_fragmentov}")
 
                 f_info.block_counter += 1  # CELKOVO V BLOKU
-                self.skontroluj_block(f_info, output)
+                self.skontroluj_block(f_info)
 
             except socket.timeout:
                 print(f"Cas vyprsal pri fragmentID:{f_info.block_counter}")
                 print(f"Celkovo:{f_info.good_fragments}/{self.pocet_fragmentov}")
                 try:
                     f_info.timeout = True
-                    self.skontroluj_block(f_info, output)
+                    self.skontroluj_block(f_info)
                     f_info.timeout = False
                 except socket.timeout:
                     print("Vyprsal cas pri opatovnom ziadani.")
                     raise
-        if self.typ_dat == "F":
-            print("Subor prijaty. Cesta:..")
-            output.close()
+        if self.typ_dat == "DF":
+            print("Subor prijaty.")
+            print(os.path.abspath("downloads/" + self.nazov_suboru))
+            self.output.close()
         else:
             print("Sprava prijata.")
-            print(output)
+            print(self.output)
 
     # TODOdorobit daj mu sancu este ak pride zly
     def recv_info(self):
@@ -132,18 +147,18 @@ class Server(Uzol):
                 elif "FIN" in types:
                     self.send_simple("ACK", self.target)
                     return 0  # error code
+            self.send_simple("ACK", self.target)
             self.sock.settimeout(2)
             self.pocet_fragmentov = struct.unpack("=i", data[1:5])[0]
             print(f"POCET FRAGMENTOV:{self.pocet_fragmentov}")
 
             if "DF" in types:
                 self.nazov_suboru = data[5:-2].decode()
-                self.typ_dat = "F"
+                self.typ_dat = "DF"
                 print(f"NAZOV SUBORU:{self.nazov_suboru}\n")
             elif "DM" in types:
-                self.typ_dat = "M"
+                self.typ_dat = "DM"
                 print("Bude sa prijmat sprava.\n")
-            self.send_simple("ACK", self.target)
 
         except CheckSumError as e:
             print(e.msg)
@@ -183,16 +198,6 @@ class Server(Uzol):
         except socket.timeout:
             print("Uplynul cas")
         self.sock.close()
-
-
-def zapis_data(typ_dat, output, block_data):
-    if typ_dat == "F":
-        for data in block_data:
-            if data is None:
-                break
-            output.write(data)
-    else:
-        output += block_data
 
 
 def dopln_data(obtained_old, obtained_new):
