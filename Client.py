@@ -69,7 +69,6 @@ class Client(Uzol):
             )
             total_cntr -= bad_count
             ids = [i for i, x in enumerate(corrupted_ids) if x is not None]
-            # print(f"ids:{ids}")
             sent_good = 0
             while sent_good != bad_count:
                 print(f"Opatovne Posielam block_id:{ids[sent_good]+1}/{self.posielane_size}.")
@@ -82,7 +81,6 @@ class Client(Uzol):
                 )
                 sent_good += 1
                 total_cntr += 1
-                # time.sleep(0.5)
             try:
                 self.recv_simple("ACK", self.recv_buffer)
             except CheckSumError:
@@ -132,14 +130,16 @@ class Client(Uzol):
             self.send_simple("ACK", self.target)
         except CheckSumError:
             print("Poskodeny packet, chyba pri nadviazani spojenia")
+            raise
         except socket.timeout:
             print("Cas vyprsal pri inicializacii")
+            raise
 
     def send(self):
         self.sock.settimeout(60)
-        self.nadviaz_spojenie()
         # spusti KA.
         try:
+            self.nadviaz_spojenie()
             while True:
                 if self.odosielane_data["TYP"] == "subor":
                     self.send_subor()
@@ -150,7 +150,7 @@ class Client(Uzol):
                     self.send_simple("FIN", self.target)
                     self.recv_simple("ACK", self.recv_buffer)  # je mozne riesit dalej
                     break
-                elif vstup.lower() == "rovnaky":
+                if vstup.lower() == "rovnaky":
                     # spusti KA
                     # zadajte odosielane data: pokial je vtomto menu posielaj KA
                     input()

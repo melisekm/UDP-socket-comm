@@ -16,11 +16,11 @@ class Server(Uzol):
         self.typ_dat = None
 
     def recv_fragment(self, data, block_data):
-        unpacked_hdr = struct.unpack("=cc", data[:2])
+        unpacked_hdr = struct.unpack("=cc", data[:2]) #Tuple, 0je type, 1,fragment id
         # Type kontrola?
-        fragment_id = unpacked_hdr[1][0]
-        raw_data = data[2:-2]
-        block_data[fragment_id] = raw_data
+        fragment_id = unpacked_hdr[1][0] # kedze je to bytes objekt dostaneme z neho prvy bajt.[0]
+        raw_data = data[2:-2] # vsetko ostane az po CRC
+        block_data[fragment_id] = raw_data # zapis na korektne miesto
         print(f"Fragment: {fragment_id + 1}/{self.posielane_size} prisiel v poriadku.")
 
     def send_nack(self, corrupted_ids):
@@ -164,14 +164,15 @@ class Server(Uzol):
         except socket.timeout:
             print("Cas vyprsal pri inicializacii")
             raise
+        print("Spojenie nadviazane.")
 
     def listen(self):
         try:
-            self.nadviaz_spojenie()
+            self.nadviaz_spojenie() #iba raz v connection, 3-Way Handshake
             while True:
-                if self.recv_info() == 0:
+                if self.recv_info() == 0: # vrati 0 ak zachyti FIN.
                     break
-                self.recv_data()
+                self.recv_data() # mod prijmania dat
                 print("Prechadzam do passive modu.")
                 self.sock.settimeout(60)  # vypni len ak nepride KA
 
