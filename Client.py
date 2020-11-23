@@ -30,7 +30,7 @@ class Client(Uzol):
         else:
             data = None
         typ = ("INIT", typ)
-        print("POSLAL:INIT")
+        print(f"POSLAL:{typ}")
         self.send_data(typ, self.pocet_fragmentov, "=ci", data, self.constants.BEZ_CHYBY)
 
         try:
@@ -38,19 +38,21 @@ class Client(Uzol):
         except CheckSumError:
             # TODO RIES
             print("Poskodeny packet, chyba pri init sprave ACK")
+            raise
         except socket.timeout:
             print("Cas vyprsal pri info pkt ACK")
+            raise
 
     def get_corrupted_ids(self, unpacked_ids):
-        res = [None] * self.posielane_size
+        res = [None] * self.velkost_bloku
         size = 0
-        for bit in range(self.posielane_size):
+        for bit in range(self.velkost_bloku):
             if unpacked_ids & (1 << bit):
                 size += 1
                 res[bit] = 1
         return res, size
 
-    def recv_data_confirmation(self, block_data, total_cntr):
+    def recv_data_confirmation(self, block_data):
         data = self.sock.recvfrom(self.recv_buffer)[0]
         sender_chksum = struct.unpack("=H", data[-2:])[0]
         if not self.crc.check(data[:-2], sender_chksum):
@@ -67,11 +69,10 @@ class Client(Uzol):
             print(
                 f"ID CORUPTED PACKETOV: {[i+1 for i,x in enumerate(corrupted_ids) if x is not None]}, pocet:{bad_count}"
             )
-            total_cntr -= bad_count
             ids = [i for i, x in enumerate(corrupted_ids) if x is not None]
             sent_good = 0
             while sent_good != bad_count:
-                print(f"Opatovne Posielam block_id:{ids[sent_good]+1}/{self.posielane_size}.")
+                print(f"Opatovne Posielam block_id:{ids[sent_good]+1}/{self.velkost_bloku}.")
                 self.send_data(
                     "DF",
                     bytes([ids[sent_good]]),
@@ -80,38 +81,48 @@ class Client(Uzol):
                     self.constants.BEZ_CHYBY,
                 )
                 sent_good += 1
-                total_cntr += 1
             try:
                 self.recv_simple("ACK", self.recv_buffer)
             except CheckSumError:
                 print("CHKSUM ERROR pri potvrdeni o znovuodoslati dat.")
+                raise
             except socket.timeout:
                 print("Nedostal potvrdenie pri znovuodoslani dat.")
+                raise
+
+    def load_block(self, file, size):
+        res = []
+        for _ in range(size):
+            res.append(file.read(self.send_buffer))
+        return res
 
     def send_subor(self):
         self.send_info("DF")
         file = open(self.odosielane_data["DATA"], "rb")
         total_cntr = 0
         block_id = 0
-        block_data = []
+        block_data = self.load_block(file, self.velkost_bloku)
         while True:
-            raw_data = file.read(self.send_buffer)
-            if block_id == 10 or total_cntr == self.pocet_fragmentov:
-                self.recv_data_confirmation(block_data, total_cntr)
+            # raw_data = file.read(self.send_buffer)
+            if block_id == self.velkost_bloku or total_cntr == self.pocet_fragmentov:
+                self.recv_data_confirmation(block_data)
                 block_id = 0
-                block_data = []
+                block_data = self.load_block(file, self.velkost_bloku)
                 if total_cntr == self.pocet_fragmentov:
                     break
-            print(f"Posielam block_id:{block_id+1}/{self.posielane_size}.")
+
+            raw_data = block_data[block_id]
+            print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
+
             # self.send_data("DF", bytes([block_id]), "=cc", raw_data, self.constants.BEZ_CHYBY)
 
-            if total_cntr % 2 != 0:
-                if self.pocet_fragmentov - total_cntr <= 5:
-                    self.send_data("DF", bytes([block_id]), "=cc", raw_data, 100)
-                else:
-                    self.send_data("DF", bytes([block_id]), "=cc", raw_data, self.constants.BEZ_CHYBY)
+            #if total_cntr % 2 != 0:
+                # if self.pocet_fragmentov - total_cntr <= 5:
+                #    self.send_data("DF", bytes([block_id]), "=cc", raw_data, 100)
+                # else:
+            self.send_data("DF", bytes([block_id]), "=cc", raw_data, self.constants.CHYBA)
 
-            block_data.append(raw_data)
+            # block_data.append(raw_data)
             block_id += 1
             total_cntr += 1
             print(f"Celkovo je to {total_cntr}/{self.pocet_fragmentov}")
@@ -134,6 +145,7 @@ class Client(Uzol):
         except socket.timeout:
             print("Cas vyprsal pri inicializacii")
             raise
+        print("Spojenie nadviazane\n")
 
     def send(self):
         self.sock.settimeout(60)
@@ -150,10 +162,12 @@ class Client(Uzol):
                     self.send_simple("FIN", self.target)
                     self.recv_simple("ACK", self.recv_buffer)  # je mozne riesit dalej
                     break
-                if vstup.lower() == "rovnaky":
+                elif vstup.lower() == "rovnaky":
                     # spusti KA
                     # zadajte odosielane data: pokial je vtomto menu posielaj KA
                     input()
+                else:
+                    break
         except CheckSumError as e:
             print(e.msg)
             print("CHKSUM ERROR pri odosielani dat.")

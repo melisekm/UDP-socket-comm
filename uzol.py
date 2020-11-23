@@ -11,7 +11,7 @@ class Uzol:
         self.crc = crc
         self.constants = constants
         self.target = None  # komu posielame data
-        self.posielane_size = 10  # velkost posielaneho bloku
+        self.velkost_bloku = 10  # velkost posielaneho bloku
 
     # transformuje zadany string/tuple na 1B cislo v bytes formate
     def vytvor_type(self, vstup):
