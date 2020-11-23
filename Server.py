@@ -7,6 +7,7 @@ from utils import CheckSumError, FragmentInfo
 class Server(Uzol):
     def __init__(self, crc, constants, port):
         super().__init__(crc, constants)
+        # self.sock.bind(("192.168.100.10", port))
         self.sock.bind(("localhost", port))
         self.crc = crc
         self.constants = constants
@@ -16,12 +17,12 @@ class Server(Uzol):
         self.typ_dat = None
 
     def recv_fragment(self, data, block_data):
-        unpacked_hdr = struct.unpack("=cc", data[:2]) #Tuple, 0je type, 1,fragment id
+        unpacked_hdr = struct.unpack("=cc", data[:2])  # Tuple, 0je type, 1,fragment id
         # Type kontrola?
-        fragment_id = unpacked_hdr[1][0] # kedze je to bytes objekt dostaneme z neho prvy bajt.[0]
-        raw_data = data[2:-2] # vsetko ostane az po CRC
-        block_data[fragment_id] = raw_data # zapis na korektne miesto
-        print(f"Fragment: {fragment_id + 1}/{self.posielane_size} prisiel v poriadku.")
+        fragment_id = unpacked_hdr[1][0]  # kedze je to bytes objekt dostaneme z neho prvy bajt.[0]
+        raw_data = data[2:-2]  # vsetko ostane az po CRC
+        block_data[fragment_id] = raw_data  # zapis na korektne miesto
+        print(f"Fragment: {fragment_id + 1}/{self.velkost_bloku} prisiel v poriadku.")
 
     def send_nack(self, corrupted_ids):
         data = 0
@@ -45,7 +46,7 @@ class Server(Uzol):
         self.send_nack(corrupted_ids)
 
         recvd_good = 0
-        block_data = [None] * 10
+        block_data = [None] * self.velkost_bloku
         while recvd_good != bad_count:
             data = self.sock.recvfrom(self.buffer)[0]
             sender_chksum = struct.unpack("=H", data[-2:])[0]
@@ -62,16 +63,16 @@ class Server(Uzol):
         return block_data
 
     def skontroluj_block(self, f_info, output):
-        zapis, dopln = f_info.check_block(self.pocet_fragmentov, self.posielane_size)
+        zapis, dopln = f_info.check_block(self.pocet_fragmentov, self.velkost_bloku)
         if dopln:
-            print("Je potrebne doplnit data")
+            print("Je potrebne doplnit data\n")
             obtained = self.obtain_corrupted(f_info, dopln)
             dopln_data(f_info.block_data, obtained)
 
         if zapis:
-            print("Koniec bloku, zapisujem data")
+            print("Koniec bloku, zapisujem data\n")
             zapis_data(self.typ_dat, output, f_info.block_data)
-            f_info.reset(self.posielane_size)
+            f_info.reset(self.velkost_bloku)
             self.send_simple("ACK", self.target)
 
     def recv_data(self):
@@ -79,14 +80,14 @@ class Server(Uzol):
             output = open("server/" + self.nazov_suboru, "wb")
         else:
             output = ""
-        f_info = FragmentInfo(self.pocet_fragmentov, self.posielane_size)
+        f_info = FragmentInfo(self.pocet_fragmentov, self.velkost_bloku)
 
         while f_info.good_fragments != self.pocet_fragmentov:
             try:
                 data = self.sock.recvfrom(self.buffer)[0]
                 sender_chksum = struct.unpack("=H", data[-2:])[0]
                 if not self.crc.check(data[:-2], sender_chksum):
-                    print(f"NESEDI CHECKSUM v {f_info.block_counter+1}/{self.posielane_size}.")
+                    print(f"NESEDI CHECKSUM v {f_info.block_counter+1}/{self.velkost_bloku}.")
 
                 else:
                     self.recv_fragment(data, f_info.block_data)
@@ -133,15 +134,15 @@ class Server(Uzol):
                     return 0  # error code
             self.sock.settimeout(2)
             self.pocet_fragmentov = struct.unpack("=i", data[1:5])[0]
-            print(f"POCET:FRAGMENTOV:{self.pocet_fragmentov}")
+            print(f"POCET FRAGMENTOV:{self.pocet_fragmentov}")
 
             if "DF" in types:
                 self.nazov_suboru = data[5:-2].decode()
                 self.typ_dat = "F"
-                print(f"NAZOV SUBORU:{self.nazov_suboru}")
+                print(f"NAZOV SUBORU:{self.nazov_suboru}\n")
             elif "DM" in types:
                 self.typ_dat = "M"
-                print("Bude sa prijmat sprava.")
+                print("Bude sa prijmat sprava.\n")
             self.send_simple("ACK", self.target)
 
         except CheckSumError as e:
@@ -164,15 +165,15 @@ class Server(Uzol):
         except socket.timeout:
             print("Cas vyprsal pri inicializacii")
             raise
-        print("Spojenie nadviazane.")
+        print("Spojenie nadviazane.\n")
 
     def listen(self):
         try:
-            self.nadviaz_spojenie() #iba raz v connection, 3-Way Handshake
+            self.nadviaz_spojenie()  # iba raz v connection, 3-Way Handshake
             while True:
-                if self.recv_info() == 0: # vrati 0 ak zachyti FIN.
+                if self.recv_info() == 0:  # vrati 0 ak zachyti FIN.
                     break
-                self.recv_data() # mod prijmania dat
+                self.recv_data()  # mod prijmania dat
                 print("Prechadzam do passive modu.")
                 self.sock.settimeout(60)  # vypni len ak nepride KA
 
