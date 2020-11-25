@@ -12,7 +12,6 @@ class Server(Uzol):
         self.sock.bind(("localhost", port))
         self.crc = crc
         self.constants = constants
-        self.buffer = 1500
         self.pocet_fragmentov = None
         self.nazov_suboru = None
         self.typ_dat = None  # typ prijatych dat
@@ -30,58 +29,66 @@ class Server(Uzol):
                     break
                 self.output += data.decode()
 
-    def recv_fragment(self, data, block_data):
-        unpacked_hdr = struct.unpack("=cc", data[:2])  # Tuple, 0je type, 1,fragment id
-        # Type kontrola?
+    def recv_fragment(self, recvd_data, block_data, expected_ids, expected_types):
+        unpacked_hdr = struct.unpack("=cc", recvd_data[:2])  # Tuple, 0je type, 1,fragment id
+        recvd_types = self.get_type(unpacked_hdr[0])
+        if expected_types != recvd_types:
+            print(f"Prijal neocakavany typ ->{recvd_types}, ked cakal ->{expected_types}")
+            return 1
         fragment_id = unpacked_hdr[1][0]  # kedze je to bytes objekt dostaneme z neho prvy bajt.[0]
-        raw_data = data[2:-2]  # vsetko ostane az po CRC
+        if fragment_id not in expected_ids:
+            print(f"RETRANSMISSION.Fragment: {fragment_id + 1}/{self.velkost_bloku} prisiel ZNOVU.")
+            return 1
+        raw_data = recvd_data[2:-2]  # vsetko ostane az po CRC
         block_data[fragment_id] = raw_data  # zapis na korektne miesto
         print(f"Fragment: {fragment_id + 1}/{self.velkost_bloku} prisiel v poriadku.")
+        expected_ids.remove(fragment_id)
+        return 0
 
     def send_nack(self, corrupted_ids):
         data = 0
         for i in corrupted_ids:
             data |= 1 << i
         print("POSLAL:NACK")
-        self.send_data("NACK", data, "=cH", None, self.constants.BEZ_CHYBY)
+        self.send_data("NACK", data, "=ci", None, self.constants.BEZ_CHYBY)
 
     def obtain_corrupted(self, f_info, dopln):
         corrupted_ids = []
         for idx, fragment in enumerate(f_info.block_data):
-            if dopln == 2 and idx >= f_info.posledny_block_size:  # DOPLN_POSLDNY == 2
+            if dopln == 2 and idx >= f_info.posledny_block_size:  # DOPLN_POSLEDNY == 2
                 break
             if fragment is None:
                 corrupted_ids.append(idx)
 
         bad_count = len(corrupted_ids)
-        print(f"Je potrebne si vyziadat: {bad_count} fragmentov")
+        print(f"Je potrebne si vyziadat: {bad_count} fragmentov\n")
         print(f"Ich ID su:{[x+1 for x in corrupted_ids]}")
 
         self.send_nack(corrupted_ids)
-
         recvd_good = 0
-        block_data = [None] * self.velkost_bloku
         while recvd_good != bad_count:
-            data = self.sock.recvfrom(self.buffer)[0]
+            data = self.sock.recvfrom(self.recv_buffer)[0]
             sender_chksum = struct.unpack("=H", data[-2:])[0]
             if not self.crc.check(data[:-2], sender_chksum):
-                raise CheckSumError("Opatovny checksum error v znovuvyziadanom fragmente.")
-                # TODO Doriesit
+                print("Zahadzujem neocakavny chybny packet.")
+                continue
 
-            self.recv_fragment(data, block_data)
+            if self.recv_fragment(data, f_info.block_data, corrupted_ids, [self.typ_dat]) == 1:
+                continue
 
             f_info.good_fragments += 1  # VSETKY
-            f_info.good_block_len += 1  # OK V BLOKU
+
             print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{self.pocet_fragmentov}")
             recvd_good += 1
-        return block_data
+
+        while not self.recv_simple("ACK", self.recv_buffer):
+            pass
 
     def skontroluj_block(self, f_info):
         zapis, dopln = f_info.check_block(self.pocet_fragmentov, self.velkost_bloku)
         if dopln:
-            print("Je potrebne doplnit data\n")
-            obtained = self.obtain_corrupted(f_info, dopln)
-            dopln_data(f_info.block_data, obtained)
+            print("Je potrebne doplnit data")
+            self.obtain_corrupted(f_info, dopln)
 
         if zapis:
             print("Koniec bloku, zapisujem data\n")
@@ -91,6 +98,7 @@ class Server(Uzol):
 
     def recv_data(self):
         if self.typ_dat == "DF":
+            ## pripadne vyrobit dls?
             self.output = open("downloads/" + self.nazov_suboru, "wb")
         else:
             self.output = ""
@@ -98,13 +106,14 @@ class Server(Uzol):
 
         while f_info.good_fragments != self.pocet_fragmentov:
             try:
-                data = self.sock.recvfrom(self.buffer)[0]
+                data = self.sock.recvfrom(self.recv_buffer)[0]
                 sender_chksum = struct.unpack("=H", data[-2:])[0]
                 if not self.crc.check(data[:-2], sender_chksum):
                     print(f"NESEDI CHECKSUM v {f_info.block_counter+1}/{self.velkost_bloku}.")
 
                 else:
-                    self.recv_fragment(data, f_info.block_data)
+                    if self.recv_fragment(data, f_info.block_data, f_info.expected_ids, [self.typ_dat]) == 1:
+                        continue
                     f_info.good_fragments += 1  # VSETKY
                     f_info.good_block_len += 1  # OK V BLOKU
                     print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{self.pocet_fragmentov}")
@@ -124,6 +133,7 @@ class Server(Uzol):
                     raise
         if self.typ_dat == "DF":
             print("Subor prijaty.")
+            print("Absolutna cesta:")
             print(os.path.abspath("downloads/" + self.nazov_suboru))
             self.output.close()
         else:
@@ -134,10 +144,12 @@ class Server(Uzol):
     def recv_info(self):
         try:
             while True:
-                data = self.sock.recvfrom(self.buffer)[0]
+                data = self.sock.recvfrom(self.recv_buffer)[0]
                 sender_chksum = struct.unpack("=H", data[-2:])[0]
                 if not self.crc.check(data[:-2], sender_chksum):
-                    raise CheckSumError("CheckSum error pri RECV INFO")
+                    # raise CheckSumError("CheckSum error pri RECV INFO")
+                    print("Prijal Neznamy pkt_chksum_err")
+                    continue
                 unpacked_hdr = struct.unpack("=c", data[:1])[0]
                 types = self.get_type(unpacked_hdr)
                 if "INIT" in types:
@@ -146,9 +158,12 @@ class Server(Uzol):
                     self.send_simple("ACK", self.target)
                 elif "FIN" in types:
                     self.send_simple("ACK", self.target)
-                    return 0  # error code
+                    return 1
+                else:
+                    print("Prijal nieco uplne ine...")
+
             self.send_simple("ACK", self.target)
-            self.sock.settimeout(2)
+            self.sock.settimeout(60)
             self.pocet_fragmentov = struct.unpack("=i", data[1:5])[0]
             print(f"POCET FRAGMENTOV:{self.pocet_fragmentov}")
 
@@ -159,6 +174,9 @@ class Server(Uzol):
             elif "DM" in types:
                 self.typ_dat = "DM"
                 print("Bude sa prijmat sprava.\n")
+            else:
+                print("Chybny typ.")
+                return 2
 
         except CheckSumError as e:
             print(e.msg)
@@ -169,10 +187,10 @@ class Server(Uzol):
 
     def nadviaz_spojenie(self):
         try:
-            self.recv_simple("SYN", self.buffer)
-            self.sock.settimeout(2)
+            self.recv_simple("SYN", self.recv_buffer)
+            self.sock.settimeout(60)
             self.send_simple(("SYN", "ACK"), self.target)
-            self.recv_simple("ACK", self.buffer)
+            self.recv_simple("ACK", self.recv_buffer)
         except CheckSumError as e:
             print(e.msg)
             print("Poskodeny packet, chyba pri nadviazani spojenia")
@@ -186,7 +204,7 @@ class Server(Uzol):
         try:
             self.nadviaz_spojenie()  # iba raz v connection, 3-Way Handshake
             while True:
-                if self.recv_info() == 0:  # vrati 0 ak zachyti FIN.
+                if self.recv_info() in (1, 2):  # 0 ak ok, ine ak err
                     break
                 self.recv_data()  # mod prijmania dat
                 print("Prechadzam do passive modu.")
@@ -198,9 +216,3 @@ class Server(Uzol):
         except socket.timeout:
             print("Uplynul cas")
         self.sock.close()
-
-
-def dopln_data(obtained_old, obtained_new):
-    for i, new_fragment in enumerate(obtained_new):
-        if new_fragment is not None:
-            obtained_old[i] = new_fragment

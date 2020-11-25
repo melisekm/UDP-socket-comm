@@ -40,13 +40,17 @@ if __name__ == "__main__":
     # ip = "192.168.100.10"
     ip = "localhost"
     port = 5015
-    max_fragment_size = 3
+    max_fragment_size = 1468
     chyba = 50
-    input()
+    s = input()
+    odosielane_data = ("subor", "kjut.png")
+    """
     odosielane_data = (
         "sprava",
-        "volam sa pes ako sa volas?\n\n dal som dve nka do sprav a dam este aj \t OMEGALOL",
+        s,
+        # "testujem dlhu parnu spravu",
     )
+    """
 
     client = Client(crc, constants, (ip, port), max_fragment_size, odosielane_data, chyba)
     client.init()
