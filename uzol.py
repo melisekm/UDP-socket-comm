@@ -31,7 +31,10 @@ class Uzol:
         chksum = self.crc.calculate(hdr)
         packed = struct.pack("=cH", hdr, chksum)
         data = packed
-        print(f"POSLAL:{typ}")
+        if "KA" in typ:
+            print(f"\nPOSLAL:{typ}")
+        else:
+            print(f"POSLAL:{typ}")
         self.sock.sendto(data, target)
 
     def get_type(self, types):

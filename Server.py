@@ -2,14 +2,15 @@ import os
 import struct
 import socket
 from uzol import Uzol
-from utils import CheckSumError, FragmentInfo
+from utils import CheckSumError
+from FragmentController import FragmentController
 
 
 class Server(Uzol):
     def __init__(self, crc, constants, port):
         super().__init__(crc, constants)
-        # self.sock.bind(("192.168.100.10", port))
-        self.sock.bind(("localhost", port))
+        self.sock.bind(("192.168.100.10", port))
+        # self.sock.bind(("localhost", port))
         self.crc = crc
         self.constants = constants
         self.pocet_fragmentov = None
@@ -103,7 +104,7 @@ class Server(Uzol):
             self.output = open("downloads/" + self.nazov_suboru, "wb")
         else:
             self.output = ""
-        f_info = FragmentInfo(self.pocet_fragmentov, self.velkost_bloku)
+        f_info = FragmentController(self.pocet_fragmentov, self.velkost_bloku)
 
         while f_info.good_fragments != self.pocet_fragmentov:
             try:

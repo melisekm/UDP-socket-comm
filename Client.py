@@ -2,16 +2,22 @@ import os
 import socket
 import struct
 import math
+import time
+from concurrent.futures import ThreadPoolExecutor
 from uzol import Uzol
-from utils import CheckSumError
+from utils import CheckSumError, get_input
 
 
 class Client(Uzol):
     def __init__(self, crc, constants, adresa, max_fragment_size, odosielane_data, chyba):
         super().__init__(crc, constants)
         self.target = adresa
-        self.send_buffer = max_fragment_size
+        self.ka = False
         self.constants.CHYBA = chyba
+        self.parse_args(max_fragment_size, odosielane_data)
+
+    def parse_args(self, max_fragment_size, odosielane_data):
+        self.send_buffer = max_fragment_size
         self.odosielane_data = {
             "TYP": "DF" if odosielane_data[0] == "subor" else "DM",
             "DATA": odosielane_data[1],
@@ -141,7 +147,7 @@ class Client(Uzol):
                 bytes([block_id]),
                 "=cc",
                 raw_data,
-                100,
+                0,
             )
 
             block_id += 1
@@ -165,23 +171,82 @@ class Client(Uzol):
             raise
         print("Spojenie nadviazane\n")
 
+    def send_fin(self):
+        self.send_simple("FIN", self.target)
+        self.recv_simple("ACK", self.recv_buffer)  # je mozne riesit dalej
+
+    def send_ka(self):
+        print("SPUSTAM KEEP ALIVE KAZDYCH 10 SEC")
+        self.sock.settimeout(5)
+        self.ka = True
+        try:
+            start = time.time()
+            while True:
+                if self.ka and time.time() - start > 10:
+                    self.send_simple("KA", self.target)
+                    self.recv_simple("ACK", self.recv_buffer)
+                    start = time.time()
+                elif self.ka is False:
+                    print("VYPINAM KEEP ALIVE")
+                    return 0
+                # time.sleep(1)
+        except socket.timeout:
+            # TODO
+            print("CAS UPLYNUL VYPINAM KEEP ALIVE.")
+            self.ka = False
+            self.send_fin()
+            return 1
+        except ConnectionResetError:
+            self.ka = False
+            print("ded")
+            return 1
+        print("pripadne sa stalo nieco ine :D CAS UPLYNUL VYPINAM KEEP ALIVE.")
+        self.ka = False
+        self.send_fin()
+        return 1
+
+    def getvstup(self):
+        while True:
+            vstup = input("[Rovnaky] target/[quit]:\n")  # spusti timer?
+            if vstup.lower() == "quit":
+                if self.ka is False:
+                    print("Cas vyprsal.")
+                    return 0
+                self.send_fin()
+                self.ka = False
+                return 0
+            if vstup.lower() == "rovnaky":
+                max_fragment_size, odosielane_data = get_input()
+                if self.ka is False:
+                    print("Cas vyprsal.")
+                    return 0
+                self.ka = False
+                self.parse_args(max_fragment_size, odosielane_data)
+                return 1
+            print("neplatny vstup")
+
+    def enable_ka_get_input(self):
+        with ThreadPoolExecutor() as executor:
+            send_ka = executor.submit(self.send_ka)
+            vstup = executor.submit(self.getvstup)
+            if send_ka.result() == 1:
+                print("konec ka")
+                return 0
+            if vstup.result() == 0:
+                print("odpalujem loop")
+                return 0
+            if vstup.result() == 1:
+                print("zadali ste rovnaky")
+                return 1
+        print("drumroll")
+
     def init(self):
         self.sock.settimeout(60)
-        # spusti KA.
         try:
             self.nadviaz_spojenie()
             while True:
                 self.send()  # main loop :D
-                vstup = input("[Rovnaky] target/[quit]")  # spusti timer?
-                if vstup.lower() == "quit":
-                    self.send_simple("FIN", self.target)
-                    self.recv_simple("ACK", self.recv_buffer)  # je mozne riesit dalej
-                    break
-                if vstup.lower() == "rovnaky":
-                    # spusti KA
-                    # zadajte odosielane data: pokial je vtomto menu posielaj KA
-                    input()
-                else:
+                if self.enable_ka_get_input() == 0:
                     break
         except CheckSumError as e:
             print(e.msg)
