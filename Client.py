@@ -21,7 +21,6 @@ class Client(Uzol):
             self.pocet_fragmentov = math.ceil(file_size / self.send_buffer)
         else:
             self.pocet_fragmentov = math.ceil(len(self.odosielane_data["DATA"]) / self.send_buffer)
-            self.msg_ptr = 0
 
     def send_info(self, typ):
         if "DF" in typ:
@@ -91,7 +90,6 @@ class Client(Uzol):
 
     def load_block(self, obj_to_send, size, total_cntr):
         res = []
-        # i = 0
         if self.odosielane_data["TYP"] == "DF":
             while len(res) != size:
                 res.append(obj_to_send.read(self.send_buffer))
@@ -127,6 +125,7 @@ class Client(Uzol):
             # self.send_data(self.odosielane_data["TYP"], bytes([block_id]), "=cc", raw_data, self.constants.BEZ_CHYBY)
 
             # if (total_cntr + 1) % 4 == 0:
+            #    print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
             #    self.send_data(self.odosielane_data["TYP"], bytes([block_id]), "=cc", raw_data, 100)
             #    self.x5.append(total_cntr % self.velkost_bloku)
             # else:
@@ -142,7 +141,7 @@ class Client(Uzol):
                 bytes([block_id]),
                 "=cc",
                 raw_data,
-                50,
+                0,
             )
 
             block_id += 1
