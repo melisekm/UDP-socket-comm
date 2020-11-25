@@ -58,6 +58,7 @@ class Uzol:
         if not self.crc.check(recvd_type, recvd_chksum):  # porovnaj crc
             print(f"CHKSUM Chyba pri{recvd_types}")
             # raise CheckSumError(f"CHKSUM Chyba pri{recvd_types}")
+            return False
 
         return True
 
@@ -66,7 +67,7 @@ class Uzol:
         posle data vo formate, TYP, INFO, DATA, CRC
             typ: co sa posiela: STR/TUPLE of STR
             hdr_info: pocet fragmentov{4B}/fragment id{2B}, INT
-            hdr_sturct: forma odosielanych dat, =ci || =cH, STR
+            hdr_sturct: forma odosielanych dat, =cI, STR
             raw_data: None || encoded data
             chyba: 0 ak posielame bez chyby, viac ako 0 - sanca na chksum error pri odosielani
         """
