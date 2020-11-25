@@ -2,7 +2,6 @@ import os
 import socket
 import struct
 import math
-import time
 from uzol import Uzol
 from utils import CheckSumError
 
@@ -12,17 +11,16 @@ class Client(Uzol):
         super().__init__(crc, constants)
         self.target = adresa
         self.send_buffer = max_fragment_size
-        self.recv_buffer = 1500
         self.constants.CHYBA = chyba
         self.odosielane_data = {
-            "TYP": odosielane_data[0],
+            "TYP": "DF" if odosielane_data[0] == "subor" else "DM",
             "DATA": odosielane_data[1],
         }
-        if self.odosielane_data["TYP"] == "subor":
-            self.file_size = os.stat(self.odosielane_data["DATA"]).st_size
-            self.pocet_fragmentov = math.ceil(self.file_size / self.send_buffer)
+        if self.odosielane_data["TYP"] == "DF":
+            file_size = os.stat(self.odosielane_data["DATA"]).st_size
+            self.pocet_fragmentov = math.ceil(file_size / self.send_buffer)
         else:
-            self.pocet_fragmentov = math.ceil(len(self.odosielane_data["DATA"] / self.send_buffer))
+            self.pocet_fragmentov = math.ceil(len(self.odosielane_data["DATA"]) / self.send_buffer)
 
     def send_info(self, typ):
         if "DF" in typ:
@@ -31,12 +29,11 @@ class Client(Uzol):
             data = None
         typ = ("INIT", typ)
         print(f"POSLAL:{typ}")
-        self.send_data(typ, self.pocet_fragmentov, "=ci", data, self.constants.BEZ_CHYBY)
+        self.send_data(typ, self.pocet_fragmentov, "=cI", data, self.constants.BEZ_CHYBY)
 
         try:
             self.recv_simple("ACK", self.recv_buffer)
         except CheckSumError:
-            # TODO RIES
             print("Poskodeny packet, chyba pri init sprave ACK")
             raise
         except socket.timeout:
@@ -64,17 +61,17 @@ class Client(Uzol):
             print("Block potvrdeny.")
             return
         if "NACK" in types:
-            unpacked_ids = struct.unpack("=H", data[1:3])[0]
+            unpacked_ids = struct.unpack("=i", data[1:5])[0]
             corrupted_ids, bad_count = self.get_corrupted_ids(unpacked_ids)
             print(
                 f"ID CORUPTED PACKETOV: {[i+1 for i,x in enumerate(corrupted_ids) if x is not None]}, pocet:{bad_count}"
             )
-            ids = [i for i, x in enumerate(corrupted_ids) if x is not None]
+            ids = [idx for idx, x in enumerate(corrupted_ids) if x is not None]
             sent_good = 0
             while sent_good != bad_count:
-                print(f"Opatovne Posielam block_id:{ids[sent_good]+1}/{self.velkost_bloku}.")
+                print(f"Opatovne posielam block_id:{ids[sent_good]+1}/{self.velkost_bloku}.")
                 self.send_data(
-                    "DF",
+                    (self.odosielane_data["TYP"]),
                     bytes([ids[sent_good]]),
                     "=cc",
                     block_data[ids[sent_good]],
@@ -82,6 +79,7 @@ class Client(Uzol):
                 )
                 sent_good += 1
             try:
+                self.send_simple("ACK", self.target)
                 self.recv_simple("ACK", self.recv_buffer)
             except CheckSumError:
                 print("CHKSUM ERROR pri potvrdeni o znovuodoslati dat.")
@@ -90,49 +88,69 @@ class Client(Uzol):
                 print("Nedostal potvrdenie pri znovuodoslani dat.")
                 raise
 
-    def load_block(self, file, size):
+    def load_block(self, obj_to_send, size, total_cntr):
         res = []
-        for _ in range(size):
-            res.append(file.read(self.send_buffer))
+        if self.odosielane_data["TYP"] == "DF":
+            while len(res) != size:
+                res.append(obj_to_send.read(self.send_buffer))
+        else:
+            for i in range(size):
+                start = total_cntr * self.send_buffer + i * self.send_buffer
+                end = start + self.send_buffer
+                res.append(obj_to_send[start:end])
         return res
 
-    def send_subor(self):
-        self.send_info("DF")
-        file = open(self.odosielane_data["DATA"], "rb")
+    def open_obj_to_send(self):
+        if self.odosielane_data["TYP"] == "DF":
+            return open(self.odosielane_data["DATA"], "rb")
+        return self.odosielane_data["DATA"]
+
+    def send(self):
+        self.send_info(self.odosielane_data["TYP"])
+        obj_to_send = self.open_obj_to_send()
         total_cntr = 0
         block_id = 0
-        block_data = self.load_block(file, self.velkost_bloku)
+        block_data = self.load_block(obj_to_send, self.velkost_bloku, total_cntr)
         while True:
             # raw_data = file.read(self.send_buffer)
-            if block_id == self.velkost_bloku or total_cntr == self.pocet_fragmentov:
+            if block_id >= self.velkost_bloku or total_cntr >= self.pocet_fragmentov:
                 self.recv_data_confirmation(block_data)
                 block_id = 0
-                block_data = self.load_block(file, self.velkost_bloku)
+                block_data = self.load_block(obj_to_send, self.velkost_bloku, total_cntr)
                 if total_cntr == self.pocet_fragmentov:
                     break
 
             raw_data = block_data[block_id]
+
+            # self.send_data(self.odosielane_data["TYP"], bytes([block_id]), "=cc", raw_data, self.constants.BEZ_CHYBY)
+
+            # if (total_cntr + 1) % 4 == 0:
+            #    print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
+            #    self.send_data(self.odosielane_data["TYP"], bytes([block_id]), "=cc", raw_data, 100)
+            #    self.x5.append(total_cntr % self.velkost_bloku)
+            # else:
+            # if total_cntr == 0:
+            #    for _ in range(5):
+            #        print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
+            #        self.send_data(self.odosielane_data["TYP"], bytes([block_id]), "=cc", raw_data, 100)
+
+            # else:
             print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
+            self.send_data(
+                (self.odosielane_data["TYP"]),
+                bytes([block_id]),
+                "=cc",
+                raw_data,
+                100,
+            )
 
-            # self.send_data("DF", bytes([block_id]), "=cc", raw_data, self.constants.BEZ_CHYBY)
-
-            #if total_cntr % 2 != 0:
-                # if self.pocet_fragmentov - total_cntr <= 5:
-                #    self.send_data("DF", bytes([block_id]), "=cc", raw_data, 100)
-                # else:
-            self.send_data("DF", bytes([block_id]), "=cc", raw_data, self.constants.CHYBA)
-
-            # block_data.append(raw_data)
             block_id += 1
             total_cntr += 1
             print(f"Celkovo je to {total_cntr}/{self.pocet_fragmentov}")
 
         print("Subor uspesne odoslany.")
-        file.close()
-
-    def send_sprava(self):
-        self.send_info("DM")
-        pass
+        if self.odosielane_data["TYP"] == "DF":
+            obj_to_send.close()
 
     def nadviaz_spojenie(self):
         try:
@@ -147,22 +165,19 @@ class Client(Uzol):
             raise
         print("Spojenie nadviazane\n")
 
-    def send(self):
+    def init(self):
         self.sock.settimeout(60)
         # spusti KA.
         try:
             self.nadviaz_spojenie()
             while True:
-                if self.odosielane_data["TYP"] == "subor":
-                    self.send_subor()
-                else:
-                    self.send_sprava()
-                vstup = input("[Rovnaky] target/[quit]")
+                self.send()  # main loop :D
+                vstup = input("[Rovnaky] target/[quit]")  # spusti timer?
                 if vstup.lower() == "quit":
                     self.send_simple("FIN", self.target)
                     self.recv_simple("ACK", self.recv_buffer)  # je mozne riesit dalej
                     break
-                elif vstup.lower() == "rovnaky":
+                if vstup.lower() == "rovnaky":
                     # spusti KA
                     # zadajte odosielane data: pokial je vtomto menu posielaj KA
                     input()
