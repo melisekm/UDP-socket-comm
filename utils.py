@@ -41,11 +41,13 @@ def get_network_data(uzol):
         except ValueError:
             print("Nespravny vstup.")
         else:
-            print(port)
             return port if uzol == "server" else (ip, port)
 
 
-def get_input():
+def get_input(keep_alive_check=0):
+    if keep_alive_check is False:
+        print("Spojenie uz bolo ukoncene. Ak chce posielat, obnovte ho.")
+        return None, None
     while True:
         try:
             max_fragment_size = int(input("Maximalna velkost fragmentov dat(1-1468): "))

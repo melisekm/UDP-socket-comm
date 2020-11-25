@@ -160,6 +160,7 @@ class Server(Uzol):
                     self.send_simple("ACK", self.target)
                 elif "FIN" in types:
                     self.send_simple("ACK", self.target)
+                    print("Prijal FIN spavu. Ukoncujem spojenie.")
                     return 1
                 else:
                     print("Prijal nieco uplne ine...")
@@ -210,8 +211,7 @@ class Server(Uzol):
                     break
                 self.recv_data()  # mod prijmania dat
                 print("Prechadzam do passive modu.")
-                self.sock.settimeout(60)  # vypni len ak nepride KA
-
+                self.sock.settimeout(20)  # vypni len ak nepride KA
         except CheckSumError as e:
             print(e.msg)
             print("Poskodeny packet.")

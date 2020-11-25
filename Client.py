@@ -147,7 +147,7 @@ class Client(Uzol):
                 bytes([block_id]),
                 "=cc",
                 raw_data,
-                0,
+                self.constants.CHYBA,
             )
 
             block_id += 1
@@ -177,11 +177,11 @@ class Client(Uzol):
 
     def send_ka(self):
         print("SPUSTAM KEEP ALIVE KAZDYCH 10 SEC")
-        self.sock.settimeout(5)
+        self.sock.settimeout(1)
         self.ka = True
-        try:
-            start = time.time()
-            while True:
+        start = time.time()
+        while True:
+            try:
                 if self.ka and time.time() - start > 10:
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
@@ -189,21 +189,20 @@ class Client(Uzol):
                 elif self.ka is False:
                     print("VYPINAM KEEP ALIVE")
                     return 0
-                # time.sleep(1)
-        except socket.timeout:
-            # TODO
-            print("CAS UPLYNUL VYPINAM KEEP ALIVE.")
-            self.ka = False
-            self.send_fin()
-            return 1
-        except ConnectionResetError:
-            self.ka = False
-            print("ded")
-            return 1
-        print("pripadne sa stalo nieco ine :D CAS UPLYNUL VYPINAM KEEP ALIVE.")
-        self.ka = False
-        self.send_fin()
-        return 1
+            # time.sleep(10)
+            except (socket.timeout, ConnectionResetError):
+                if self.ka is False:
+                    return 0
+                print("Nedostal potvrdenie na KA. Posielam opatovne.")
+                self.sock.settimeout(1)
+                try:
+                    self.send_simple("KA", self.target)
+                    self.recv_simple("ACK", self.recv_buffer)
+                    start = time.time()
+                except (socket.timeout, ConnectionResetError):
+                    print("Cas uplynul vypinam keep alive a ukoncujem spojenie.")
+                    self.ka = False
+                    return 1
 
     def getvstup(self):
         while True:
@@ -216,7 +215,7 @@ class Client(Uzol):
                 self.ka = False
                 return 0
             if vstup.lower() == "rovnaky":
-                max_fragment_size, odosielane_data = get_input()
+                max_fragment_size, odosielane_data = get_input(self.ka)
                 if self.ka is False:
                     print("Cas vyprsal.")
                     return 0
@@ -253,5 +252,4 @@ class Client(Uzol):
             print("CHKSUM ERROR pri odosielani dat.")
         except socket.timeout:
             print("Cas vyprsal pri odosielani dat.")
-
         self.sock.close()
