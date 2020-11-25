@@ -29,12 +29,13 @@ class CheckSumError(Exception):
 
 
 class FragmentInfo:
-    def __init__(self, pocet_fragmentov, posielane_size):
+    def __init__(self, pocet_fragmentov, velkost_bloku):
         self.good_fragments = 0
         self.good_block_len = 0
         self.block_counter = 0
-        self.block_data = [None] * posielane_size
-        self.posledny_block_size = math.ceil(pocet_fragmentov % posielane_size)
+        self.block_data = [None] * velkost_bloku
+        self.posledny_block_size = math.ceil(pocet_fragmentov % velkost_bloku)
+        self.expected_ids = list(range(velkost_bloku))
         self.DOPLN_POSLEDNY = 2
         self.timeout = False
 
@@ -42,6 +43,7 @@ class FragmentInfo:
         self.good_block_len = 0
         self.block_counter = 0
         self.block_data = [None] * posielane_size
+        self.expected_ids = list(range(posielane_size))
 
     def posledny_block(self, pocet_fragmentov):
         # prva cast ci je to posledny block, druha cast ci je to posledny pkt v bloku ALEBO nastal timeout

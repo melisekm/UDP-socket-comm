@@ -3,8 +3,10 @@ import socket
 import random
 from utils import CheckSumError
 
-# predstavuje client/server.
+
 class Uzol:
+    """Predstavuje client/server."""
+
     def __init__(self, crc, constants):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet  # UDP
         self.sock.settimeout(60)  # defaultna doba cakania pri inicializovani
@@ -12,9 +14,10 @@ class Uzol:
         self.constants = constants
         self.target = None  # komu posielame data
         self.velkost_bloku = 10  # velkost posielaneho bloku
+        self.recv_buffer = 1500
 
-    # transformuje zadany string/tuple na 1B cislo v bytes formate
     def vytvor_type(self, vstup):
+        """Transformuje zadany string/tuple na 1B cislo v bytes formate."""
         if not isinstance(vstup, tuple):
             vstup = (vstup,)  # aby sme mohli iterovat
         result = 0
@@ -22,8 +25,8 @@ class Uzol:
             result |= self.constants.types[typ]
         return bytes([result])
 
-    # odosle jednoduchu spravu s typom bez dat
     def send_simple(self, typ, target):
+        """Odosle jednoduchu spravu s typom bez dat."""
         hdr = self.vytvor_type(typ)
         chksum = self.crc.calculate(hdr)
         packed = struct.pack("=cH", hdr, chksum)
@@ -31,8 +34,8 @@ class Uzol:
         print(f"POSLAL:{typ}")
         self.sock.sendto(data, target)
 
-    # transformuje prijaty 1B typ na list typov.
     def get_type(self, types):
+        """Transformuje prijaty 1B typ na list STR typov."""
         res = []
         for pkt_type in types:  # prijate
             for global_type in self.constants.types.items():  # konstanty
@@ -41,27 +44,32 @@ class Uzol:
         print(f"PRIJAL:{res}")
         return res
 
-    # posle jednuchu spravu bez dat len s Type na zaklade vstupu.
     def recv_simple(self, expected_typ, buffer):
+        """Posle jednuchu spravu bez dat, len s Type na zaklade vstupu."""
         data, addr = self.sock.recvfrom(buffer)
         if self.target is None:
             self.target = addr  # pre server ak este nevie skym komunikuje
-        unpacked = struct.unpack("=cH", data)  # otvor hlavicku c type, H CRC
-        recvd_types = self.get_type(unpacked[0])  # zisti o aky typ sa jedna
-        if not self.crc.check(unpacked[0], unpacked[1]):  # porovnaj crc
-            raise CheckSumError(f"CHKSUM Chyba pri{recvd_types}")
+        recvd_type = struct.unpack("=c", data[:1])[0]  # otvor hlavicku c type, H CRC
+        recvd_types = self.get_type(recvd_type)  # zisti o aky typ sa jedna
+        if not skontroluj_type(expected_typ, recvd_types):
+            print("Prijal nieco ine ako ocakaval.")
+            return False
+        recvd_chksum = struct.unpack("=H", data[-2:])[0]
+        if not self.crc.check(recvd_type, recvd_chksum):  # porovnaj crc
+            print(f"CHKSUM Chyba pri{recvd_types}")
+            # raise CheckSumError(f"CHKSUM Chyba pri{recvd_types}")
 
-        if skontroluj_type(expected_typ, recvd_types):
-            return True
-        return False
+        return True
 
-    # posle data vo formate, TYP, INFO, DATA, CRC
-    # typ co sa posiela: STR/TUPLE of STR
-    # hdr_info: pocet fragmentov{4B}/fragment id{2B}, INT
-    # hdr_sturct: forma odosielanych dat, =ci || =cH, STR
-    # raw_data: None || encoded data
-    # chyba: 0 ak posielame bez chyby, > 0 sanca na chksum error pri odosielani
     def send_data(self, typ, hdr_info, hdr_struct, raw_data, chyba):
+        """
+        posle data vo formate, TYP, INFO, DATA, CRC
+            typ: co sa posiela: STR/TUPLE of STR
+            hdr_info: pocet fragmentov{4B}/fragment id{2B}, INT
+            hdr_sturct: forma odosielanych dat, =ci || =cH, STR
+            raw_data: None || encoded data
+            chyba: 0 ak posielame bez chyby, viac ako 0 - sanca na chksum error pri odosielani
+        """
         pokaz_checksum = 0
         if raw_data is None:
             raw_data = ""
