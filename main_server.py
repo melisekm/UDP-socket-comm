@@ -3,8 +3,8 @@ from server import Server
 from utils import Crc, Constants
 
 if __name__ == "__main__":
-    if os.path.exists("server/kjut.png"):
-        os.remove("server/kjut.png")
+    if os.path.exists("downloads/kjut.png"):
+        os.remove("downloads/kjut.png")
         print("Stare kjut.png odstranene")
     else:
         print("The file does not exist")
