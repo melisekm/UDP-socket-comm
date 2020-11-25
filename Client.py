@@ -29,7 +29,7 @@ class Client(Uzol):
             data = None
         typ = ("INIT", typ)
         print(f"POSLAL:{typ}")
-        self.send_data(typ, self.pocet_fragmentov, "=ci", data, self.constants.BEZ_CHYBY)
+        self.send_data(typ, self.pocet_fragmentov, "=cI", data, self.constants.BEZ_CHYBY)
 
         try:
             self.recv_simple("ACK", self.recv_buffer)
@@ -141,7 +141,7 @@ class Client(Uzol):
                 bytes([block_id]),
                 "=cc",
                 raw_data,
-                0,
+                100,
             )
 
             block_id += 1

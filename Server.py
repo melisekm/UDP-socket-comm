@@ -50,7 +50,7 @@ class Server(Uzol):
         for i in corrupted_ids:
             data |= 1 << i
         print("POSLAL:NACK")
-        self.send_data("NACK", data, "=ci", None, self.constants.BEZ_CHYBY)
+        self.send_data("NACK", data, "=cI", None, self.constants.BEZ_CHYBY)
 
     def obtain_corrupted(self, f_info, dopln):
         corrupted_ids = []
@@ -65,7 +65,7 @@ class Server(Uzol):
         print(f"Ich ID su:{[x+1 for x in corrupted_ids]}")
 
         self.send_nack(corrupted_ids)
-        
+
         recvd_good = 0
         while recvd_good != bad_count:
             data = self.sock.recvfrom(self.recv_buffer)[0]
