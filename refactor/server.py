@@ -50,26 +50,35 @@ class Server(Uzol):
         self.logger.log(f"Ich ID su:{[int(x)+1 for x in corrupted_ids.split(',')]}", 5)
         self.send_nack(bad_count, corrupted_ids)
         recvd_good = 0
-        while recvd_good != bad_count:
-            recvd_data = self.recvfrom(self.recv_buffer)
-            if recvd_data is None:
-                self.logger.log("Zahadzujem neocakavny chybny packet.", 5)
-                continue
+        try:
+            while recvd_good != bad_count:
+                recvd_data = self.recvfrom()
+                if recvd_data is None:
+                    self.logger.log("Zahadzujem neocakavny chybny packet.", 5)
+                    continue
 
-            if self.process_fragment(recvd_data, [self.typ], f_info) == 1:  # neocakavany typ, ina chyba
-                continue
-            f_info.good_fragments += 1  # VSETKY
-            print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{f_info.pocet_fragmentov}")
-            recvd_good += 1
+                if self.process_fragment(recvd_data, [self.typ], f_info) == 1:  # neocakavany typ, ina chyba
+                    continue
+                f_info.good_fragments += 1  # VSETKY
+                f_info.good_block_len += 1  # OK V BLOKU
+                print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{f_info.pocet_fragmentov}\n")
+                recvd_good += 1
+        except socket.timeout:
+            return 1
+        return 0
 
     def skontroluj_block(self, f_info):
         zapis, dopln = f_info.check_block(self.velkost_bloku)
         if dopln:
             print("Je potrebne doplnit data")
-            self.obtain_corrupted(f_info, dopln)
+            neuspech_ziadania = 0
+            while self.obtain_corrupted(f_info, dopln) != 0:
+                if neuspech_ziadania == 2:
+                    raise socket.timeout
+                neuspech_ziadania += 1
 
         if zapis:
-            self.logger.log("Koniec bloku, zapisujem data\n", 5)
+            self.logger.log("Koniec bloku\n", 5)
             f_info.reset()
             self.send_simple("ACK", self.target)
 
@@ -77,7 +86,7 @@ class Server(Uzol):
         unpacked_hdr = struct.unpack("=cI", recvd_data[: self.constants.DATA_HEADER_LEN])  # Tuple, 0je type, 1,fragment id
         recvd_types = self.get_type(unpacked_hdr[0], recvd_data)
         if expected_types != recvd_types:
-            self.logger.log(f"Prijal neocakavany typ -> {recvd_types}, ked cakal -> {expected_types}", 1)
+            self.logger.log(f"Prijal neocakavany typ -> {recvd_types}, ked cakal -> {expected_types}", 5)
             return 1
         fragment_id = unpacked_hdr[1]
         if f_info.block_data[fragment_id] is not None:
@@ -93,13 +102,13 @@ class Server(Uzol):
         f_info = FragmentController(pocet_fragmentov, self.velkost_bloku)
         while f_info.good_fragments != f_info.pocet_fragmentov:
             try:
-                recvd_data = self.recvfrom(self.recv_buffer)
-                if recvd_data is None:
+                recvd_data = self.recvfrom()  # Prijmi datovy paket.
+                if recvd_data is None:  # Poskodeny.
                     print(f"NESEDI CHECKSUM v {f_info.block_counter+1}/{self.velkost_bloku}.")
 
                 else:
-                    if self.process_fragment(recvd_data, [self.typ], f_info) == 1:  # neocakavany typ, ina chyba
-                        continue
+                    if self.process_fragment(recvd_data, [self.typ], f_info) == 1:
+                        continue  # neocakavany typ, ina chyba
                     f_info.good_fragments += 1  # VSETKY
                     f_info.good_block_len += 1  # OK V BLOKU
                     print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{f_info.pocet_fragmentov}")
@@ -126,9 +135,9 @@ class Server(Uzol):
         return f_info.block_data
 
     def recv_info(self):
-        recvd_data = self.recvfrom(self.recv_buffer)
+        recvd_data = self.recvfrom()
         if recvd_data is None:
-            print("Prijal Neznamy pkt_chksum_err")
+            self.logger.log("Prijal Neznamy pkt_chksum_err", 1)
             return (None, None)
         unpacked_hdr = struct.unpack("=c", recvd_data[:1])[0]
         types = self.get_type(unpacked_hdr, recvd_data)
@@ -146,8 +155,8 @@ class Server(Uzol):
         if "KA" in types:
             self.send_simple("ACK", self.target)
         else:
-            print("Prijal nieco uplne ine...")
-        return (None, None)
+            self.logger.log("Prijal nieco uplne ine...", 1)
+        return None, None
 
     def recv_data(self):
         while True:
@@ -155,7 +164,7 @@ class Server(Uzol):
             if mod == "DF":
                 nazov_suboru = self.recv_fragments("DM", pocet)
                 pocet_fragmentov = self.recv_info()[1]
-                print(f"Nazov suboru je: {nazov_suboru}")
+                print(f"Nazov suboru je: {nazov_suboru}\n")
                 subor = self.recv_fragments("DF", pocet_fragmentov)
                 self.zapis_data(nazov_suboru, subor)
             elif mod == "DM":
@@ -171,23 +180,22 @@ class Server(Uzol):
             self.send_simple(("SYN", "ACK"), self.target)
             self.recv_simple("ACK", self.recv_buffer)
         except CheckSumError as e:
-            print(e.msg)
-            print("Poskodeny packet, chyba pri nadviazani spojenia")
+            self.logger.log(e.msg, 5)
+            self.logger.log("Poskodeny packet, chyba pri nadviazani spojenia", 5)
             raise
         except socket.timeout:
-            print("Cas vyprsal pri inicializacii")
+            self.logger.log("Cas vyprsal pri inicializacii", 5)
             raise
-        print("Spojenie nadviazane.\n")
+        self.logger.log("Spojenie nadviazane.\n", 1)
 
     def listen(self):
         self.sock.settimeout(60)  # defaultna doba cakania pri inicializovani
         try:
             self.nadviaz_spojenie()  # iba raz v connection, 3-Way Handshake
             self.recv_data()
-
         except CheckSumError as e:
-            print(e.msg)
-            print("Poskodeny packet.")
+            self.logger.log(e.msg, 5)
+            self.logger.log("Neocakavny poskodeny packet.", 5)
         except socket.timeout:
-            print("Uplynul cas")
+            self.logger.log("Uplynul cas, ukoncujem spojenie", 1)
         self.sock.close()

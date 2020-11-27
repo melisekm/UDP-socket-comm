@@ -9,10 +9,10 @@ if __name__ == "__main__":
     # ip = "192.168.100.10"
     ip = "localhost"
     port = 5015
-    max_fragment_size = 1465
+    max_fragment_size = 1
     chyba = 50
     s = input()
-    odosielane_data = ("subor", "kjut.png")
+    odosielane_data = ("subor", "text.txt")
     """
     odosielane_data = (
         "sprava",

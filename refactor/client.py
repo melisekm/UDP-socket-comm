@@ -14,6 +14,7 @@ class Client(Uzol):
         self.target = adresa
         self.ka = False
         self.constants.CHYBA = chyba
+        self.KA_cycle = 10
         self.parse_args(max_fragment_size, odosielane_data)
 
     def parse_args(self, max_fragment_size, odosielane_data):
@@ -30,13 +31,13 @@ class Client(Uzol):
         else:
             self.pocet_fragmentov_data = math.ceil(len(self.odosielane_data["DATA"]) / self.send_buffer)
 
-    def send_corrupted(self, block_data, data):
+    def send_corrupted(self, block_data, data, pocet_fragmentov):
         bad_count = struct.unpack("=I", data[0:4])[0]
         corrupted_ids = list(map(int, data[4:].decode().split(",")))
         # data[4:] je bytes, decode na string, split na list, a convert vsetky na int cez list(map(int,string))
-        print(f"ID corrupted packetov:{[x+1 for x in corrupted_ids]}, pocet:{bad_count}")
+        self.logger.log(f"ID corrupted packetov:{[x+1 for x in corrupted_ids]}, pocet:{bad_count}", 1)
         for i in range(bad_count):
-            print(f"Opatovne posielam block_id:{corrupted_ids[i]+1}/{self.velkost_bloku}.")
+            print(f"Opatovne posielam block_id:{corrupted_ids[i]+1}/{pocet_fragmentov}.")
             self.send_data(
                 self.typ,
                 corrupted_ids[i],
@@ -45,24 +46,24 @@ class Client(Uzol):
                 self.constants.BEZ_CHYBY,
             )
         try:
-            self.recv_simple("ACK", self.recv_buffer)
+            self.recv_data_confirmation(block_data, pocet_fragmentov)
         except CheckSumError:
-            print("CHKSUM ERROR pri potvrdeni o znovuodoslati dat.")
+            self.logger.log("CHKSUM ERROR pri potvrdeni o znovuodoslati dat.", 1)
             raise
         except socket.timeout:
-            print("Nedostal potvrdenie pri znovuodoslani dat.")
+            self.logger.log("Nedostal potvrdenie pri znovuodoslani dat.", 1)
             raise
 
-    def recv_data_confirmation(self, block_data):
-        recvd_data = self.recvfrom(self.recv_buffer)
+    def recv_data_confirmation(self, block_data, pocet_fragmentov):
+        recvd_data = self.recvfrom()
         if recvd_data is None:
             raise CheckSumError("ChcekSum error pri ACK/NACK.")
         unpacked_typ = struct.unpack("=c", recvd_data[:1])[0]
         types = self.get_type(unpacked_typ, recvd_data)
         if "ACK" in types:
-            print("Block potvrdeny.")
+            self.logger.log("Block potvrdeny.\n", 1)
         elif "NACK" in types:
-            self.send_corrupted(block_data, recvd_data[1:-2])
+            self.send_corrupted(block_data, recvd_data[1:-2], pocet_fragmentov)
 
     def open_obj_to_send(self):
         if self.typ == "DF":
@@ -89,7 +90,7 @@ class Client(Uzol):
         block_data = self.load_block(obj_to_send, total_cntr)
         while True:
             if block_id >= self.velkost_bloku or total_cntr >= pocet_fragmentov:
-                self.recv_data_confirmation(block_data)
+                self.recv_data_confirmation(block_data, pocet_fragmentov)
                 block_id = 0
                 block_data = self.load_block(obj_to_send, total_cntr)
                 if total_cntr == pocet_fragmentov:
@@ -102,13 +103,13 @@ class Client(Uzol):
                 total_cntr,
                 "=cI",
                 raw_data,
-                self.constants.CHYBA,
+                self.constants.BEZ_CHYBY,
             )
             block_id += 1
             total_cntr += 1
-            print(f"Celkovo je to {total_cntr}/{pocet_fragmentov}")
+            print(f"Celkovo je to {total_cntr}/{pocet_fragmentov}\n")
 
-        print("Data uspesne odoslane.")
+        self.logger.log("Data uspesne odoslane.", 1)
         if self.typ == "DF":
             obj_to_send.close()
 
@@ -117,10 +118,10 @@ class Client(Uzol):
         try:
             self.recv_simple("ACK", self.recv_buffer)
         except CheckSumError:
-            print("Poskodeny packet, chyba pri init sprave ACK")
+            self.logger.log("Poskodeny packet, chyba pri init sprave ACK", 5)
             raise
         except socket.timeout:
-            print("Cas vyprsal pri info pkt ACK")
+            self.logger.log("Cas vyprsal pri info pkt ACK", 5)
             raise
 
     def send_data_init(self):
@@ -139,51 +140,51 @@ class Client(Uzol):
             self.recv_simple(("SYN", "ACK"), self.recv_buffer)
             self.send_simple("ACK", self.target)
         except CheckSumError:
-            print("Poskodeny packet, chyba pri nadviazani spojenia")
+            self.logger.log("Poskodeny packet, chyba pri nadviazani spojenia", 5)
             raise
         except socket.timeout:
-            print("Cas vyprsal pri inicializacii")
+            self.logger.log("Cas vyprsal pri inicializacii", 5)
             raise
-        print("Spojenie nadviazane\n")
+        self.logger.log("Spojenie nadviazane.\n", 1)
 
     def send_fin(self):
         print("Ukoncujem spojenie..")
         self.send_simple("FIN", self.target)
-        self.recv_simple("ACK", self.recv_buffer)  # je mozne riesit dalej
+        self.recv_simple("ACK", self.recv_buffer)
 
     def send_ka(self):
-        print("SPUSTAM KEEP ALIVE KAZDYCH 10 SEC")
-        self.sock.settimeout(1)
+        self.logger.log("SPUSTAM KEEP ALIVE KAZDYCH 10 SEC", 1)
+        self.sock.settimeout(4)
         self.ka = True
         start = time.time()
         while True:
             try:
-                if self.ka and time.time() - start > 10:
+                if self.ka:
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
                     start = time.time()
                 elif self.ka is False:
-                    print("VYPINAM KEEP ALIVE")
+                    self.logger.log("VYPINAM KEEP ALIVE", 1)
                     return 0
-            # time.sleep(10)
+                time.sleep(self.KA_cycle)
             except (socket.timeout, ConnectionResetError):
                 if self.ka is False:
                     return 0
-                print("Nedostal potvrdenie na KA. Posielam opatovne.")
-                self.sock.settimeout(1)
+                self.logger.log("Nedostal potvrdenie na KA. Posielam opatovne.", 0)
+                self.sock.settimeout(4)
                 try:
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
                     start = time.time()
                 except (socket.timeout, ConnectionResetError):
-                    print("Cas uplynul vypinam keep alive a ukoncujem spojenie.")
+                    self.logger.log("Neodstal potvrdenie. Vypinam keep alive a ukoncujem spojenie.", 0)
                     self.ka = False
                     return 1
 
     def get_vstup(self):
         while True:
-            vstup = input("[Rovnaky] target/[quit]:\n")  # spusti timer?
-            if vstup.lower() == "quit":
+            vstup = input("[Rovnaky] target / [toggle] KA spam: / [fin] ukonci spojenie\n")
+            if vstup.lower() == "fin":
                 if self.ka is False:
                     print("Cas vyprsal.")
                     return 0
@@ -198,22 +199,21 @@ class Client(Uzol):
                 self.ka = False
                 self.parse_args(max_fragment_size, odosielane_data)
                 return 1
-            print("neplatny vstup")
+            if vstup.lower() == "toggle":
+                self.logger.print = not self.logger.print
+            else:
+                print("neplatny vstup")
 
     def enable_ka_get_input(self):
         with ThreadPoolExecutor() as executor:
             send_ka = executor.submit(self.send_ka)
             vstup = executor.submit(self.get_vstup)
             if send_ka.result() == 1:
-                print("konec ka")
                 return 0
             if vstup.result() == 0:
-                print("odpalujem loop")
                 return 0
             if vstup.result() == 1:
-                print("zadali ste rovnaky")
                 return 1
-        print("drumroll")
 
     def run(self):
         self.sock.settimeout(5)
@@ -223,9 +223,10 @@ class Client(Uzol):
                 self.send_data_init()  # main loop
                 if self.enable_ka_get_input() == 0:
                     break
+                self.logger.print = True
         except CheckSumError as e:
-            print(e.msg)
-            print("CHKSUM ERROR pri odosielani dat.")
+            self.logger.log(e.msg, 5)
+            self.logger.log("CHKSUM ERROR pri odosielani dat.", 5)
         except socket.timeout:
-            print("Cas vyprsal pri odosielani dat.")
+            self.logger.log("Cas vyprsal pri odosielani dat.", 5)
         self.sock.close()

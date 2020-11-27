@@ -71,7 +71,7 @@ class Uzol:
         """
         posle data vo formate, TYP, INFO, DATA, CRC
             typ: co sa posiela: STR/TUPLE of STR
-            hdr_info: pocet fragmentov{4B}/fragment id{2B}, INT
+            hdr_info: pocet fragmentov{4B}/fragment id{4B}, INT
             hdr_sturct: forma odosielanych dat, =cI, STR
             raw_data: None || encoded data
             chyba: 0 ak posielame bez chyby, viac ako 0 - sanca na chksum error pri odosielani
@@ -92,8 +92,12 @@ class Uzol:
         data_packed = data + chksum
         self.sock.sendto(data_packed, self.target)
 
-    def recvfrom(self, buffer):
-        data = self.sock.recvfrom(buffer)[0]
+    def recvfrom(self):
+        """
+        Wrapper pre recvfrom s CRC kontrolou
+        Vrati data, ak paket nebol poskoedny inak None
+        """
+        data = self.sock.recvfrom(self.recv_buffer)[0]
         recvd_chksum = struct.unpack("=H", data[-2:])[0]
         if not self.crc.check(data[:-2], recvd_chksum):  # porovnaj crc
             return None
@@ -101,6 +105,7 @@ class Uzol:
 
 
 def skontroluj_type(expected_typ, recvd_types):
+    """Porovna prijaty typ s ocakavanym."""
     if not isinstance(expected_typ, tuple):
         expected_typ = (expected_typ,)
     for typ in expected_typ:
