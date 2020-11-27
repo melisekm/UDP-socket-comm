@@ -70,10 +70,10 @@ class Server(Uzol):
     def skontroluj_block(self, f_info):
         zapis, dopln = f_info.check_block(self.velkost_bloku)
         if dopln:
-            print("Je potrebne doplnit data.", end=' ')
+            print("Je potrebne doplnit data.", end=" ")
             neuspech_ziadania = 0
             while self.obtain_corrupted(f_info, dopln) != 0:
-                if neuspech_ziadania == 2:
+                if neuspech_ziadania == 1:
                     raise socket.timeout
                 neuspech_ziadania += 1
 
@@ -135,27 +135,28 @@ class Server(Uzol):
         return f_info.block_data
 
     def recv_info(self):
-        recvd_data = self.recvfrom()
-        if recvd_data is None:
-            self.logger.log("Prijal Neznamy pkt_chksum_err", 1)
-            return (None, None)
-        unpacked_hdr = struct.unpack("=c", recvd_data[:1])[0]
-        types = self.get_type(unpacked_hdr, recvd_data)
+        while True:
+            recvd_data = self.recvfrom()
+            if recvd_data is None:
+                self.logger.log("Prijal Neznamy pkt_chksum_err", 1)
+                return (None, None)
+            unpacked_hdr = struct.unpack("=c", recvd_data[:1])[0]
+            types = self.get_type(unpacked_hdr, recvd_data)
 
-        if "INIT" in types:
-            self.sock.settimeout(2)
-            pocet = struct.unpack("=I", recvd_data[1 : self.constants.DATA_HEADER_LEN])[0]
-            self.send_simple("ACK", self.target)
-            return types[1], pocet
+            if "INIT" in types:
+                self.sock.settimeout(2)
+                pocet = struct.unpack("=I", recvd_data[1 : self.constants.DATA_HEADER_LEN])[0]
+                self.send_simple("ACK", self.target)
+                return types[1], pocet
 
-        if "FIN" in types:
-            self.send_simple("ACK", self.target)
-            print("Prijal FIN spravu. Ukoncujem spojenie.")
-            return "FIN", None
-        if "KA" in types:
-            self.send_simple("ACK", self.target)
-        else:
-            self.logger.log("Prijal nieco uplne ine...", 1)
+            if "FIN" in types:
+                self.send_simple("ACK", self.target)
+                print("Prijal FIN spravu. Ukoncujem spojenie.")
+                return "FIN", None
+            if "KA" in types:
+                self.send_simple("ACK", self.target)
+            else:
+                self.logger.log("Prijal nieco uplne ine...", 1)
         return None, None
 
     def recv_data(self):

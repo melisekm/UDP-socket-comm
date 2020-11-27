@@ -16,7 +16,6 @@ class Client(Uzol):
         self.constants.CHYBA = chyba
         self.KA_cycle = 10
         self.parse_args(max_fragment_size, odosielane_data)
-        self.pokaz = False
 
     def parse_args(self, max_fragment_size, odosielane_data):
         self.send_buffer = max_fragment_size
@@ -103,7 +102,7 @@ class Client(Uzol):
                 total_cntr,
                 "=cI",
                 raw_data,
-                self.constants.BEZ_CHYBY,
+                50,
             )
             block_id += 1
             total_cntr += 1
@@ -154,7 +153,7 @@ class Client(Uzol):
 
     def send_ka(self):
         self.logger.log("SPUSTAM KEEP ALIVE KAZDYCH 10 SEC", 1)
-        self.sock.settimeout(4)
+        self.sock.settimeout(2)
         self.ka = True
         while True:
             try:
@@ -168,7 +167,7 @@ class Client(Uzol):
                 if self.ka is False:
                     return 0
                 print("Nedostal potvrdenie na KA. Posielam opatovne.")
-                self.sock.settimeout(4)
+                self.sock.settimeout(2)
                 try:
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
@@ -214,7 +213,7 @@ class Client(Uzol):
                 return 1
 
     def run(self):
-        self.sock.settimeout(5)
+        self.sock.settimeout(3)
         try:
             self.nadviaz_spojenie()
             while True:
