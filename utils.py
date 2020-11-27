@@ -1,5 +1,5 @@
 import json
-import math
+import os
 import crcmod
 
 
@@ -18,6 +18,10 @@ class Constants:
     def __init__(self):
         self.CHYBA = 50
         self.BEZ_CHYBY = 0
+        self.DOPLN = 2
+        self.DATA_HEADER_LEN = 5
+        self.INFO_HEADER_LEN = 1
+        self.CRC_LEN = 2
         with open("constants.json", "r") as file:
             self.types = json.load(file)
 
@@ -28,41 +32,44 @@ class CheckSumError(Exception):
         super().__init__(msg)
 
 
-class FragmentInfo:
-    def __init__(self, pocet_fragmentov, velkost_bloku):
-        self.good_fragments = 0
-        self.good_block_len = 0
-        self.block_counter = 0
-        self.block_data = [None] * velkost_bloku
-        self.posledny_block_size = math.ceil(pocet_fragmentov % velkost_bloku)
-        self.expected_ids = list(range(velkost_bloku))
-        self.DOPLN_POSLEDNY = 2
-        self.timeout = False
+def get_network_data(uzol):
+    while True:
+        try:
+            if uzol == "client":
+                ip = input("IP Adresa: ")
+            port = int(input("Port: "))
+        except ValueError:
+            print("Nespravny vstup.")
+        else:
+            return port if uzol == "server" else (ip, port)
 
-    def reset(self, posielane_size):
-        self.good_block_len = 0
-        self.block_counter = 0
-        self.block_data = [None] * posielane_size
-        self.expected_ids = list(range(posielane_size))
 
-    def posledny_block(self, pocet_fragmentov):
-        # prva cast ci je to posledny block, druha cast ci je to posledny pkt v bloku ALEBO nastal timeout
-        return self.good_fragments >= pocet_fragmentov - self.posledny_block_size and (
-            (self.block_counter == self.posledny_block_size) or self.timeout
-        )
-
-    def check_block(self, pocet_fragmentov, posielane_size):
-        dopln, zapis = 0, 0
-        if self.posledny_block(pocet_fragmentov):
-            print("posledny block")
-            zapis = 1
-            if self.good_block_len != self.posledny_block_size:
-                dopln = self.DOPLN_POSLEDNY
-                print("Treba doplnit z posledneho blocku")
-            return (zapis, dopln)
-
-        if self.block_counter == posielane_size or self.timeout:
-            zapis = 1
-            if self.good_block_len != posielane_size:
-                dopln = 1
-        return (zapis, dopln)
+def get_input(keep_alive_check=0):
+    if keep_alive_check is False:
+        print("Spojenie uz bolo ukoncene. Ak chce posielat, obnovte ho.")
+        return None, None
+    while True:
+        try:
+            max_fragment_size = int(input("Maximalna velkost fragmentov dat(1-1465): "))
+            if max_fragment_size < 1 or max_fragment_size > 1465:
+                raise ValueError("Zadali ste fragment size mimo range.")
+            odosielane_data = input("Odoslat: [sprava], [subor]: ")
+            if odosielane_data not in ("sprava", "subor"):
+                raise ValueError("Nespravny vstup")
+            if odosielane_data == "sprava":
+                sprava = input("Zadajte spravu: ")
+                odosielane_data = (odosielane_data, sprava)
+            elif odosielane_data == "subor":
+                file_name = input("Cesta k suboru: ").replace("\\", "/")
+                odosielane_data = (odosielane_data, file_name)
+                if not os.path.exists(file_name):
+                    raise IOError
+        except IOError:
+            print("Subor neexistuje.")
+        except ValueError as e:
+            if "invalid" in str(e):
+                print("Musi to byt ciselko.")
+            else:
+                print(e)
+        else:
+            return max_fragment_size, odosielane_data
