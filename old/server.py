@@ -9,8 +9,8 @@ from FragmentController import FragmentController
 class Server(Uzol):
     def __init__(self, crc, constants, port):
         super().__init__(crc, constants)
-        self.sock.bind(("192.168.100.10", port))
-        # self.sock.bind(("localhost", port))
+        # self.sock.bind(("192.168.100.10", port))
+        self.sock.bind(("localhost", port))
         self.crc = crc
         self.constants = constants
         self.pocet_fragmentov = None
@@ -43,6 +43,7 @@ class Server(Uzol):
         raw_data = recvd_data[2:-2]  # vsetko ostane az po CRC
         block_data[fragment_id] = raw_data  # zapis na korektne miesto
         print(f"Fragment: {fragment_id + 1}/{self.velkost_bloku} prisiel v poriadku.")
+        print(f"Celkova velkost fragmentu: {len(recvd_data)}, Data:{len(raw_data)}")
         expected_ids.remove(fragment_id)
         return 0
 
@@ -160,13 +161,13 @@ class Server(Uzol):
                     self.send_simple("ACK", self.target)
                 elif "FIN" in types:
                     self.send_simple("ACK", self.target)
-                    print("Prijal FIN spavu. Ukoncujem spojenie.")
+                    print("Prijal FIN spravu. Ukoncujem spojenie.")
                     return 1
                 else:
                     print("Prijal nieco uplne ine...")
 
             self.send_simple("ACK", self.target)
-            self.sock.settimeout(60)
+            self.sock.settimeout(2)
             self.pocet_fragmentov = struct.unpack("=i", data[1:5])[0]
             print(f"POCET FRAGMENTOV:{self.pocet_fragmentov}")
 
@@ -191,7 +192,7 @@ class Server(Uzol):
     def nadviaz_spojenie(self):
         try:
             self.recv_simple("SYN", self.recv_buffer)
-            self.sock.settimeout(60)
+            self.sock.settimeout(2)
             self.send_simple(("SYN", "ACK"), self.target)
             self.recv_simple("ACK", self.recv_buffer)
         except CheckSumError as e:

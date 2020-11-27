@@ -60,7 +60,7 @@ def get_input(keep_alive_check=0):
                 sprava = input("Zadajte spravu: ")
                 odosielane_data = (odosielane_data, sprava)
             elif odosielane_data == "subor":
-                file_name = input("Cesta k suboru: ")
+                file_name = input("Cesta k suboru: ").replace("\\", "/")
                 odosielane_data = (odosielane_data, file_name)
                 if not os.path.exists(file_name):
                     raise IOError

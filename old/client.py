@@ -30,7 +30,7 @@ class Client(Uzol):
 
     def send_info(self, typ):
         if "DF" in typ:
-            data = self.odosielane_data["DATA"]
+            data = os.path.basename(self.odosielane_data["DATA"])
         else:
             data = None
         typ = ("INIT", typ)
@@ -141,13 +141,17 @@ class Client(Uzol):
             #        self.send_data(self.odosielane_data["TYP"], bytes([block_id]), "=cc", raw_data, 100)
 
             # else:
+            if (total_cntr + 1) == 10:
+                block_id += 1
+                total_cntr += 1
+                continue
             print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
             self.send_data(
                 (self.odosielane_data["TYP"]),
                 bytes([block_id]),
                 "=cc",
                 raw_data,
-                self.constants.CHYBA,
+                self.constants.BEZ_CHYBY,
             )
 
             block_id += 1
@@ -204,7 +208,7 @@ class Client(Uzol):
                     self.ka = False
                     return 1
 
-    def getvstup(self):
+    def get_vstup(self):
         while True:
             vstup = input("[Rovnaky] target/[quit]:\n")  # spusti timer?
             if vstup.lower() == "quit":
@@ -227,7 +231,7 @@ class Client(Uzol):
     def enable_ka_get_input(self):
         with ThreadPoolExecutor() as executor:
             send_ka = executor.submit(self.send_ka)
-            vstup = executor.submit(self.getvstup)
+            vstup = executor.submit(self.get_vstup)
             if send_ka.result() == 1:
                 print("konec ka")
                 return 0
