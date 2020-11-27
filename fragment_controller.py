@@ -25,11 +25,9 @@ class FragmentController:
     def check_block(self, posielane_size):
         dopln, zapis = 0, 0
         if self.posledny_block():
-            print("posledny block")
             zapis = 1
             if self.good_block_len != self.posledny_block_size:
                 dopln = self.DOPLN_POSLEDNY
-                print("Treba doplnit z posledneho blocku")
             return (zapis, dopln)
 
         if self.block_counter == posielane_size or self.timeout:

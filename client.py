@@ -16,6 +16,7 @@ class Client(Uzol):
         self.constants.CHYBA = chyba
         self.KA_cycle = 10
         self.parse_args(max_fragment_size, odosielane_data)
+        self.pokaz = False
 
     def parse_args(self, max_fragment_size, odosielane_data):
         self.send_buffer = max_fragment_size
@@ -35,7 +36,7 @@ class Client(Uzol):
         bad_count = struct.unpack("=I", data[0:4])[0]
         corrupted_ids = list(map(int, data[4:].decode().split(",")))
         # data[4:] je bytes, decode na string, split na list, a convert vsetky na int cez list(map(int,string))
-        self.logger.log(f"ID corrupted packetov:{[x+1 for x in corrupted_ids]}, pocet:{bad_count}", 1)
+        self.logger.log(f"ID corrupted packetov:{[x+1 for x in corrupted_ids]}", 1)
         for i in range(bad_count):
             print(f"Opatovne posielam block_id:{corrupted_ids[i]+1}/{pocet_fragmentov}.")
             self.send_data(
@@ -95,7 +96,6 @@ class Client(Uzol):
                 block_data = self.load_block(obj_to_send, total_cntr)
                 if total_cntr == pocet_fragmentov:
                     break
-
             raw_data = block_data[block_id]
             print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
             self.send_data(
@@ -156,37 +156,34 @@ class Client(Uzol):
         self.logger.log("SPUSTAM KEEP ALIVE KAZDYCH 10 SEC", 1)
         self.sock.settimeout(4)
         self.ka = True
-        start = time.time()
         while True:
             try:
                 if self.ka:
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
-                    start = time.time()
                 elif self.ka is False:
                     self.logger.log("VYPINAM KEEP ALIVE", 1)
                     return 0
-                time.sleep(self.KA_cycle)
             except (socket.timeout, ConnectionResetError):
                 if self.ka is False:
                     return 0
-                self.logger.log("Nedostal potvrdenie na KA. Posielam opatovne.", 0)
+                print("Nedostal potvrdenie na KA. Posielam opatovne.")
                 self.sock.settimeout(4)
                 try:
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
-                    start = time.time()
                 except (socket.timeout, ConnectionResetError):
-                    self.logger.log("Neodstal potvrdenie. Vypinam keep alive a ukoncujem spojenie.", 0)
+                    print("Neodstal ani opatovne potvrdenie. Vypinam keep alive a ukoncujem spojenie.")
                     self.ka = False
                     return 1
+            time.sleep(self.KA_cycle)
 
     def get_vstup(self):
         while True:
             vstup = input("[Rovnaky] target / [toggle] KA spam: / [fin] ukonci spojenie\n")
             if vstup.lower() == "fin":
                 if self.ka is False:
-                    print("Cas vyprsal.")
+                    print("Spojenie bolo ukoncene.")
                     return 0
                 self.send_fin()
                 self.ka = False
@@ -194,10 +191,11 @@ class Client(Uzol):
             if vstup.lower() == "rovnaky":
                 max_fragment_size, odosielane_data = get_input(self.ka)
                 if self.ka is False:
-                    print("Cas vyprsal.")
+                    print("Spojenie bolo ukoncene.")
                     return 0
                 self.ka = False
                 self.parse_args(max_fragment_size, odosielane_data)
+                print("Vypinam KeepAlive...")
                 return 1
             if vstup.lower() == "toggle":
                 self.logger.print = not self.logger.print

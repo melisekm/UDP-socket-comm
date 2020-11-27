@@ -70,7 +70,7 @@ class Server(Uzol):
     def skontroluj_block(self, f_info):
         zapis, dopln = f_info.check_block(self.velkost_bloku)
         if dopln:
-            print("Je potrebne doplnit data")
+            print("Je potrebne doplnit data.", end=' ')
             neuspech_ziadania = 0
             while self.obtain_corrupted(f_info, dopln) != 0:
                 if neuspech_ziadania == 2:
@@ -104,14 +104,14 @@ class Server(Uzol):
             try:
                 recvd_data = self.recvfrom()  # Prijmi datovy paket.
                 if recvd_data is None:  # Poskodeny.
-                    print(f"NESEDI CHECKSUM v {f_info.block_counter+1}/{self.velkost_bloku}.")
+                    print(f"NESEDI CHECKSUM v {f_info.block_counter+1}/{self.velkost_bloku}.\n")
 
                 else:
                     if self.process_fragment(recvd_data, [self.typ], f_info) == 1:
                         continue  # neocakavany typ, ina chyba
                     f_info.good_fragments += 1  # VSETKY
                     f_info.good_block_len += 1  # OK V BLOKU
-                    print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{f_info.pocet_fragmentov}")
+                    print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{f_info.pocet_fragmentov}\n")
 
                 f_info.block_counter += 1  # CELKOVO V BLOKU
                 self.skontroluj_block(f_info)
@@ -160,15 +160,23 @@ class Server(Uzol):
 
     def recv_data(self):
         while True:
-            mod, pocet = self.recv_info()
+            mod, pocet_fragmentov = self.recv_info()
             if mod == "DF":
-                nazov_suboru = self.recv_fragments("DM", pocet)
-                pocet_fragmentov = self.recv_info()[1]
-                print(f"Nazov suboru je: {nazov_suboru}\n")
-                subor = self.recv_fragments("DF", pocet_fragmentov)
+                print(f"\nPocet fragmentov nazvu suboru je: {pocet_fragmentov}")
+
+                nazov_suboru = self.recv_fragments("DM", pocet_fragmentov)
+                pocet_fragmentov_suboru = self.recv_info()[1]
+
+                print(f"\nNazov suboru je: {nazov_suboru}\n")
+                print(f"Pocet fragmentov suboru je: {pocet_fragmentov_suboru}")
+
+                subor = self.recv_fragments("DF", pocet_fragmentov_suboru)
                 self.zapis_data(nazov_suboru, subor)
+
             elif mod == "DM":
-                sprava = self.recv_fragments("DM", pocet)
+                print(f"\nPocet fragmentov spravy je: {pocet_fragmentov}")
+
+                sprava = self.recv_fragments("DM", pocet_fragmentov)
                 self.zapis_data(None, sprava)
             elif mod == "FIN":
                 break
