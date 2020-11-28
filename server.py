@@ -14,8 +14,9 @@ class Server(Uzol):
 
     def zapis_data(self, nazov_suboru, udaje):
         if nazov_suboru is None:
-            print("Sprava prijata.")
+            print(f"Sprava prijata.\n{'*'*50}")
             print(udaje)
+            print("*" * 50)
         else:
             with open("downloads/" + nazov_suboru, "wb") as file:
                 for data in udaje:
@@ -83,18 +84,19 @@ class Server(Uzol):
             self.send_simple("ACK", self.target)
 
     def process_fragment(self, recvd_data, expected_types, f_info):
-        unpacked_hdr = struct.unpack("=cI", recvd_data[: self.constants.DATA_HEADER_LEN])  # Tuple, 0je type, 1,fragment id
-        recvd_types = self.get_type(unpacked_hdr[0], recvd_data)
+        unpacked_type = struct.unpack("=c", recvd_data[0:1])[0]  # 1B type
+        recvd_types = self.get_type(unpacked_type, recvd_data)
         if expected_types != recvd_types:
             self.logger.log(f"Prijal neocakavany typ -> {recvd_types}, ked cakal -> {expected_types}", 5)
             return 1
-        fragment_id = unpacked_hdr[1]
+        unpacked_id = struct.unpack("=I", recvd_data[1 : self.constants.DATA_HEADER_LEN])[0]  # 4B fragment_id
+        fragment_id = unpacked_id
         if f_info.block_data[fragment_id] is not None:
             self.logger.log(f"RETRANSMISSION.Fragment: {fragment_id + 1}/{f_info.pocet_fragmentov} prisiel ZNOVU.", 1)
             return 1
         raw_data = recvd_data[self.constants.DATA_HEADER_LEN : -2]  # vsetko ostane az po CRC
         f_info.block_data[fragment_id] = raw_data  # zapis na korektne miesto
-        print(f"Fragment: {(fragment_id % f_info.pocet_fragmentov) + 1}/{self.velkost_bloku} prisiel v poriadku.")
+        print(f"Fragment: {(fragment_id % self.velkost_bloku) + 1}/{self.velkost_bloku} prisiel v poriadku.")
         return 0
 
     def recv_fragments(self, typ, pocet_fragmentov):
@@ -199,6 +201,7 @@ class Server(Uzol):
 
     def listen(self):
         self.sock.settimeout(60)  # defaultna doba cakania pri inicializovani
+        print("Listening..")
         try:
             self.nadviaz_spojenie()  # iba raz v connection, 3-Way Handshake
             self.recv_data()

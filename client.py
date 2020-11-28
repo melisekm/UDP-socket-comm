@@ -93,7 +93,7 @@ class Client(Uzol):
                 self.recv_data_confirmation(block_data, pocet_fragmentov)
                 block_id = 0
                 block_data = self.load_block(obj_to_send, total_cntr)
-                if total_cntr == pocet_fragmentov:
+                if total_cntr >= pocet_fragmentov:
                     break
             raw_data = block_data[block_id]
             print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
@@ -102,7 +102,7 @@ class Client(Uzol):
                 total_cntr,
                 "=cI",
                 raw_data,
-                50,
+                0,
             )
             block_id += 1
             total_cntr += 1
@@ -166,13 +166,13 @@ class Client(Uzol):
             except (socket.timeout, ConnectionResetError):
                 if self.ka is False:
                     return 0
-                print("Nedostal potvrdenie na KA. Posielam opatovne.")
+                print("\nNedostal potvrdenie na KA. Posielam opatovne.")
                 self.sock.settimeout(2)
                 try:
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
                 except (socket.timeout, ConnectionResetError):
-                    print("Neodstal ani opatovne potvrdenie. Vypinam keep alive a ukoncujem spojenie.")
+                    print("\nNeodstal ani opatovne potvrdenie. Vypinam keep alive a ukoncujem spojenie.")
                     self.ka = False
                     return 1
             time.sleep(self.KA_cycle)
@@ -189,8 +189,9 @@ class Client(Uzol):
                 return 0
             if vstup.lower() == "rovnaky":
                 max_fragment_size, odosielane_data = get_input(self.ka)
-                if self.ka is False:
+                if self.ka is False or max_fragment_size is None:
                     print("Spojenie bolo ukoncene.")
+                    self.ka = False
                     return 0
                 self.ka = False
                 self.parse_args(max_fragment_size, odosielane_data)

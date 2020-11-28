@@ -53,7 +53,10 @@ def get_input(keep_alive_check=0):
             max_fragment_size = int(input("Maximalna velkost fragmentov dat(1-1465): "))
             if max_fragment_size < 1 or max_fragment_size > 1465:
                 raise ValueError("Zadali ste fragment size mimo range.")
+            print("Pre ukoncenie napiste [quit]")
             odosielane_data = input("Odoslat: [sprava], [subor]: ")
+            if "quit" in odosielane_data:
+                return None, None
             if odosielane_data not in ("sprava", "subor"):
                 raise ValueError("Nespravny vstup")
             if odosielane_data == "sprava":
@@ -68,7 +71,7 @@ def get_input(keep_alive_check=0):
             print("Subor neexistuje.")
         except ValueError as e:
             if "invalid" in str(e):
-                print("Musi to byt ciselko.")
+                print("Musi to byt cele ciselko.")
             else:
                 print(e)
         else:

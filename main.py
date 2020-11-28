@@ -10,6 +10,8 @@ if __name__ == "__main__":
         if vstup == "client":
             ip, port = utils.get_network_data(vstup)
             max_fragment_size, odosielane_data = utils.get_input()
+            if max_fragment_size is None:
+                continue
             client = Client(crc, constants, (ip, port), max_fragment_size, odosielane_data, 50)
             client.run()
         elif vstup == "server":
