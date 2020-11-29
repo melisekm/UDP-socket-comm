@@ -15,8 +15,8 @@ if __name__ == "__main__":
             client = Client(crc, constants, (ip, port), max_fragment_size, odosielane_data, chyba)
             client.run()
         elif vstup == "server":
-            port = utils.get_network_data(vstup)
-            server = Server(crc, constants, port)
+            path, port = utils.get_network_data(vstup)
+            server = Server(crc, constants, path, port)
             server.listen()
         elif vstup == "quit":
             break

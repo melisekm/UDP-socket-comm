@@ -22,6 +22,7 @@ if __name__ == "__main__":
         server.listen()
     """
     port = 5015
+    path = "downloads"
     input()
-    server = Server(crc, constants, port)
+    server = Server(crc, constants, path, port)
     server.listen()

@@ -164,7 +164,7 @@ class Client(Uzol):
         self.logger.log("Spojenie nadviazane.\n", 1)
 
     def send_fin(self):
-        print("Ukoncujem spojenie..")
+        print("Vypinam KeepAlive a ukoncujem spojenie..")
         self.send_simple("FIN", self.target)
         self.recv_simple("ACK", self.recv_buffer)
 
@@ -247,5 +247,3 @@ class Client(Uzol):
         except ConnectionResetError:
             print("Druha strana ukoncila spojenie.")
         self.sock.close()
-        print(self.odoslane_bytes)
-        print(self.prijate_bytes)

@@ -7,10 +7,11 @@ from fragment_controller import FragmentController
 
 
 class Server(Uzol):
-    def __init__(self, crc, constants, port):
+    def __init__(self, crc, constants, path, port):
         super().__init__(crc, constants)
-        # self.sock.bind(("192.168.100.10", port))
+        self.path = path
         self.sock.bind(("localhost", port))
+        # self.sock.bind(("192.168.100.10", port))
 
     def zapis_data(self, nazov_suboru, udaje):
         if nazov_suboru is None:
@@ -18,12 +19,13 @@ class Server(Uzol):
             print(udaje)
             print("*" * 50)
         else:
-            with open("downloads/" + nazov_suboru, "wb") as file:  # TODO
+            cesta = self.path + "/" + nazov_suboru
+            with open(cesta, "wb") as file:
                 for data in udaje:
                     file.write(data)
             print("Subor prijaty.")
             print("Absolutna cesta:")
-            print(os.path.abspath("downloads/" + nazov_suboru))
+            print(os.path.abspath(cesta))
 
         self.sock.settimeout(20)
         print("Prechadzam do passive modu.")

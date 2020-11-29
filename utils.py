@@ -40,18 +40,29 @@ def get_network_data(uzol):
                 ip = input("IP Adresa: ")
                 if ip != "localhost":
                     socket.inet_aton(ip)
+            if uzol == "server":
+                path = input("Zadajte priecinok kam sa budu ukladat data: ")
+                if not os.path.exists(path):
+                    vstup = input("Priecinok neexistuje, vytvorit?[y/n]: ")
+                    if vstup == "y":
+                        os.mkdir(path)
+                    else:
+                        continue
             port = int(input("Port: "))
+            if not 0 < port < 65536:
+                print("Neplatny port.")
+                continue
         except ValueError:
             print("Nespravny vstup.")
         except socket.error:
             print("Neplatna IP adresa")
         else:
-            return port if uzol == "server" else (ip, port)
+            return (path, port) if uzol == "server" else (ip, port)
 
 
 def get_input(keep_alive_check=0):
     if keep_alive_check is False:
-        print("Spojenie uz bolo ukoncene. Ak chce posielat, obnovte ho.")
+        print("Spojenie uz bolo ukoncene. Ak chcete posielat, obnovte ho.")
         return None, None, None
     while True:
         try:
