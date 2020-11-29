@@ -88,7 +88,7 @@ class Uzol:
         data = packed_hdr + raw_data
         chksum = struct.pack("=H", self.crc.calculate(data))
         if pokaz_checksum:
-            chksum = struct.pack("=H", 0)
+            chksum = struct.pack("=H", self.crc.calculate(data) + 1)
         data_packed = data + chksum
         self.sock.sendto(data_packed, self.target)
 

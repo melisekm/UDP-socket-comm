@@ -18,7 +18,7 @@ class Server(Uzol):
             print(udaje)
             print("*" * 50)
         else:
-            with open("downloads/" + nazov_suboru, "wb") as file:
+            with open("downloads/" + nazov_suboru, "wb") as file:  # TODO
                 for data in udaje:
                     file.write(data)
             print("Subor prijaty.")

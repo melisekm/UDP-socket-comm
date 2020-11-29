@@ -13,11 +13,11 @@ class Client(Uzol):
         super().__init__(crc, constants)
         self.target = adresa
         self.ka = False
-        self.constants.CHYBA = chyba
         self.KA_cycle = 10
-        self.parse_args(max_fragment_size, odosielane_data)
+        self.parse_args(max_fragment_size, odosielane_data, chyba)
 
-    def parse_args(self, max_fragment_size, odosielane_data):
+    def parse_args(self, max_fragment_size, odosielane_data, chyba):
+        self.constants.CHYBA = chyba
         self.send_buffer = max_fragment_size
         self.odosielane_data = {
             "TYP": "DF" if odosielane_data[0] == "subor" else "DM",
@@ -35,7 +35,7 @@ class Client(Uzol):
         bad_count = struct.unpack("=I", data[0:4])[0]
         corrupted_ids = list(map(int, data[4:].decode().split(",")))
         # data[4:] je bytes, decode na string, split na list, a convert vsetky na int cez list(map(int,string))
-        self.logger.log(f"ID corrupted packetov:{[x+1 for x in corrupted_ids]}", 1)
+        self.logger.log(f"\nID corrupted packetov:{[x+1 for x in corrupted_ids]}\n", 1)
         for i in range(bad_count):
             print(f"Opatovne posielam block_id:{corrupted_ids[i]+1}/{pocet_fragmentov}.")
             self.send_data(
@@ -70,6 +70,11 @@ class Client(Uzol):
             return open(self.odosielane_data["DATA"], "rb")
         return self.odosielane_data["DATA"]
 
+    def close_obj(self, obj):
+        self.logger.log("Data uspesne odoslane.", 1)
+        if self.typ == "DF":
+            obj.close()
+
     def load_block(self, obj, total_cntr):
         res = []
         if self.typ == "DF":
@@ -88,6 +93,9 @@ class Client(Uzol):
         total_cntr = 0
         block_id = 0
         block_data = self.load_block(obj_to_send, total_cntr)
+        if pocet_fragmentov == 0:
+            self.close_obj(obj_to_send)
+            return
         while True:
             if block_id >= self.velkost_bloku or total_cntr >= pocet_fragmentov:
                 self.recv_data_confirmation(block_data, pocet_fragmentov)
@@ -95,22 +103,31 @@ class Client(Uzol):
                 block_data = self.load_block(obj_to_send, total_cntr)
                 if total_cntr >= pocet_fragmentov:
                     break
-            raw_data = block_data[block_id]
             print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
-            self.send_data(
-                self.typ,
-                total_cntr,
-                "=cI",
-                raw_data,
-                0,
-            )
+            raw_data = block_data[block_id]
+
+            if self.constants.CHYBA < 0 and (total_cntr + 1) == -self.constants.CHYBA:
+                self.send_data(
+                    self.typ,
+                    total_cntr,
+                    "=cI",
+                    raw_data,
+                    100,
+                )
+            else:
+                self.send_data(
+                    self.typ,
+                    total_cntr,
+                    "=cI",
+                    raw_data,
+                    self.constants.CHYBA,
+                )
+
             block_id += 1
             total_cntr += 1
             print(f"Celkovo je to {total_cntr}/{pocet_fragmentov}\n")
 
-        self.logger.log("Data uspesne odoslane.", 1)
-        if self.typ == "DF":
-            obj_to_send.close()
+        self.close_obj(obj_to_send)
 
     def send_info(self, typ, pocet):
         self.send_data(typ, pocet, "=cI", None, self.constants.BEZ_CHYBY)
@@ -188,13 +205,13 @@ class Client(Uzol):
                 self.ka = False
                 return 0
             if vstup.lower() == "rovnaky":
-                max_fragment_size, odosielane_data = get_input(self.ka)
+                max_fragment_size, odosielane_data, chyba = get_input(self.ka)
                 if self.ka is False or max_fragment_size is None:
                     print("Spojenie bolo ukoncene.")
                     self.ka = False
                     return 0
                 self.ka = False
-                self.parse_args(max_fragment_size, odosielane_data)
+                self.parse_args(max_fragment_size, odosielane_data, chyba)
                 print("Vypinam KeepAlive...")
                 return 1
             if vstup.lower() == "toggle":
@@ -227,4 +244,8 @@ class Client(Uzol):
             self.logger.log("CHKSUM ERROR pri odosielani dat.", 5)
         except socket.timeout:
             self.logger.log("Cas vyprsal pri odosielani dat.", 5)
+        except ConnectionResetError:
+            print("Druha strana ukoncila spojenie.")
         self.sock.close()
+        print(self.odoslane_bytes)
+        print(self.prijate_bytes)

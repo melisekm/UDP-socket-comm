@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import crcmod
 
 
@@ -37,9 +38,13 @@ def get_network_data(uzol):
         try:
             if uzol == "client":
                 ip = input("IP Adresa: ")
+                if ip != "localhost":
+                    socket.inet_aton(ip)
             port = int(input("Port: "))
         except ValueError:
             print("Nespravny vstup.")
+        except socket.error:
+            print("Neplatna IP adresa")
         else:
             return port if uzol == "server" else (ip, port)
 
@@ -47,7 +52,7 @@ def get_network_data(uzol):
 def get_input(keep_alive_check=0):
     if keep_alive_check is False:
         print("Spojenie uz bolo ukoncene. Ak chce posielat, obnovte ho.")
-        return None, None
+        return None, None, None
     while True:
         try:
             max_fragment_size = int(input("Maximalna velkost fragmentov dat(1-1465): "))
@@ -56,7 +61,7 @@ def get_input(keep_alive_check=0):
             print("Pre ukoncenie napiste [quit]")
             odosielane_data = input("Odoslat: [sprava], [subor]: ")
             if "quit" in odosielane_data:
-                return None, None
+                return None, None, None
             if odosielane_data not in ("sprava", "subor"):
                 raise ValueError("Nespravny vstup")
             if odosielane_data == "sprava":
@@ -67,6 +72,7 @@ def get_input(keep_alive_check=0):
                 odosielane_data = (odosielane_data, file_name)
                 if not os.path.exists(file_name):
                     raise IOError
+            chyba = int(input(r"Zadajte [%] chybnych packetov. [-X] pre pokazenie X teho packetu: "))
         except IOError:
             print("Subor neexistuje.")
         except ValueError as e:
@@ -75,4 +81,4 @@ def get_input(keep_alive_check=0):
             else:
                 print(e)
         else:
-            return max_fragment_size, odosielane_data
+            return max_fragment_size, odosielane_data, chyba
