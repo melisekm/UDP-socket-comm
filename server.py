@@ -37,9 +37,7 @@ class Server(Uzol):
         corrupted_ids = ""
         zaciatok_bloku = f_info.good_fragments - f_info.good_block_len
         koniec_bloku = (
-            zaciatok_bloku + self.velkost_bloku
-            if dopln != self.constants.DOPLN
-            else zaciatok_bloku + f_info.posledny_block_size
+            zaciatok_bloku + self.velkost_bloku if dopln != self.constants.DOPLN else zaciatok_bloku + f_info.posledny_block_size
         )
         dlzka = 0
         for idx in range(zaciatok_bloku, koniec_bloku):

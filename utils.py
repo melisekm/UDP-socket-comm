@@ -12,7 +12,7 @@ class Crc:
         return self.crc_func(bytes(data))
 
     def check(self, data, sender_chksum):
-        return self.crc_func(bytes(data)) == sender_chksum
+        return self.calculate(data) == sender_chksum
 
 
 class Constants:
@@ -41,7 +41,7 @@ def get_network_data(uzol):
                 if ip != "localhost":
                     socket.inet_aton(ip)
             if uzol == "server":
-                path = input("Zadajte priecinok kam sa budu ukladat data: ")
+                path = input("Zadajte priecinok kam sa budu ukladat data [.] pre cestu so skriptom: ")
                 if not os.path.exists(path):
                     vstup = input("Priecinok neexistuje, vytvorit?[y/n]: ")
                     if vstup == "y":

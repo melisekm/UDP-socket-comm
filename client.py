@@ -24,10 +24,12 @@ class Client(Uzol):
             "DATA": odosielane_data[1],
         }
         if self.odosielane_data["TYP"] == "DF":
+            self.path = self.odosielane_data["DATA"]
             file_size = os.stat(self.odosielane_data["DATA"]).st_size
             self.pocet_fragmentov_data = math.ceil(file_size / self.send_buffer)
             dlzka_meno = len(os.path.basename(self.odosielane_data["DATA"]))
             self.pocet_fragmentov_nazov = math.ceil(dlzka_meno / self.send_buffer)
+            self.odosielane_data["DATA"] = os.path.basename(self.odosielane_data["DATA"])
         else:
             self.pocet_fragmentov_data = math.ceil(len(self.odosielane_data["DATA"]) / self.send_buffer)
 
@@ -67,7 +69,7 @@ class Client(Uzol):
 
     def open_obj_to_send(self):
         if self.typ == "DF":
-            return open(self.odosielane_data["DATA"], "rb")
+            return open(self.path, "rb")
         return self.odosielane_data["DATA"]
 
     def close_obj(self, obj):
@@ -122,7 +124,6 @@ class Client(Uzol):
                     raw_data,
                     self.constants.CHYBA,
                 )
-
             block_id += 1
             total_cntr += 1
             print(f"Celkovo je to {total_cntr}/{pocet_fragmentov}\n")
@@ -172,11 +173,13 @@ class Client(Uzol):
         self.logger.log("SPUSTAM KEEP ALIVE KAZDYCH 10 SEC", 1)
         self.sock.settimeout(2)
         self.ka = True
+        start = time.time()
         while True:
             try:
-                if self.ka:
+                if self.ka and time.time() - start > 10:
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
+                    start = time.time()
                 elif self.ka is False:
                     self.logger.log("VYPINAM KEEP ALIVE", 1)
                     return 0
@@ -188,11 +191,12 @@ class Client(Uzol):
                 try:
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
+                    start = time.time()
                 except (socket.timeout, ConnectionResetError):
                     print("\nNeodstal ani opatovne potvrdenie. Vypinam keep alive a ukoncujem spojenie.")
                     self.ka = False
                     return 1
-            time.sleep(self.KA_cycle)
+            time.sleep(1)
 
     def get_vstup(self):
         while True:
@@ -212,7 +216,6 @@ class Client(Uzol):
                     return 0
                 self.ka = False
                 self.parse_args(max_fragment_size, odosielane_data, chyba)
-                print("Vypinam KeepAlive...")
                 return 1
             if vstup.lower() == "toggle":
                 self.logger.print = not self.logger.print
@@ -220,7 +223,7 @@ class Client(Uzol):
                 print("neplatny vstup")
 
     def enable_ka_get_input(self):
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             send_ka = executor.submit(self.send_ka)
             vstup = executor.submit(self.get_vstup)
             if send_ka.result() == 1:
