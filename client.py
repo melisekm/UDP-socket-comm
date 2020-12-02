@@ -11,28 +11,29 @@ from uzol import Uzol
 class Client(Uzol):
     def __init__(self, crc, constants, adresa, max_fragment_size, odosielane_data, chyba):
         super().__init__(crc, constants)
-        self.target = adresa
-        self.ka = False
-        self.KA_cycle = 10
+        self.target = adresa  # (IP,port) zo vstupu
+        self.ka = False  # zapnute KeepAlive
+        self.KA_cycle = 10  # ako casto posielame KA signaly
         self.parse_args(max_fragment_size, odosielane_data, chyba)
 
     def parse_args(self, max_fragment_size, odosielane_data, chyba):
-        self.constants.CHYBA = chyba
-        self.send_buffer = max_fragment_size
+        self.constants.CHYBA = chyba  # v ktorom packete sa ma vytvorit chyba
+        self.send_buffer = max_fragment_size  # kolko dat odosielame v jednom fragmente
         self.odosielane_data = {
             "TYP": "DF" if odosielane_data[0] == "subor" else "DM",
-            "DATA": odosielane_data[1],
+            "DATA": odosielane_data[1],  # sprava alebo nazov suboru
         }
         if self.odosielane_data["TYP"] == "DF":
-            self.path = self.odosielane_data["DATA"]
+            self.path = self.odosielane_data["DATA"]  # cesta k suboru
             file_size = os.stat(self.odosielane_data["DATA"]).st_size
             self.pocet_fragmentov_data = math.ceil(file_size / self.send_buffer)
             dlzka_meno = len(os.path.basename(self.odosielane_data["DATA"]))
             self.pocet_fragmentov_nazov = math.ceil(dlzka_meno / self.send_buffer)
-            self.odosielane_data["DATA"] = os.path.basename(self.odosielane_data["DATA"])
+            self.odosielane_data["DATA"] = os.path.basename(self.odosielane_data["DATA"])  # IBA nazov suboru
         else:
             self.pocet_fragmentov_data = math.ceil(len(self.odosielane_data["DATA"]) / self.send_buffer)
 
+    # znovuposlanie vyziadanych packetov, data arg je uz okresane o typ a crc
     def send_corrupted(self, block_data, data, pocet_fragmentov):
         bad_count = struct.unpack("=I", data[0:4])[0]
         corrupted_ids = list(map(int, data[4:].decode().split(",")))
@@ -56,6 +57,7 @@ class Client(Uzol):
             self.logger.log("Nedostal potvrdenie pri znovuodoslani dat.", 1)
             raise
 
+    # na zaklade prijateho ACK/NACK odosle dalsie data alebo prejde na dalsi blok
     def recv_data_confirmation(self, block_data, pocet_fragmentov):
         recvd_data = self.recvfrom()
         if recvd_data is None:
@@ -77,6 +79,7 @@ class Client(Uzol):
         if self.typ == "DF":
             obj.close()
 
+    # nacita jeden blok velkosti send_buffer
     def load_block(self, obj, total_cntr):
         res = []
         if self.typ == "DF":
@@ -84,7 +87,7 @@ class Client(Uzol):
                 res.append(obj.read(self.send_buffer))
         else:
             for i in range(self.velkost_bloku):
-                start = total_cntr * self.send_buffer + i * self.send_buffer
+                start = total_cntr * self.send_buffer + i * self.send_buffer  # offset + id
                 end = start + self.send_buffer
                 res.append(obj[start:end])
         return res
@@ -95,15 +98,15 @@ class Client(Uzol):
         total_cntr = 0
         block_id = 0
         block_data = self.load_block(obj_to_send, total_cntr)
-        if pocet_fragmentov == 0:
+        if pocet_fragmentov == 0:  # prazdny subor, ziadne fragmenty
             self.close_obj(obj_to_send)
             return
         while True:
-            if block_id >= self.velkost_bloku or total_cntr >= pocet_fragmentov:
-                self.recv_data_confirmation(block_data, pocet_fragmentov)
-                block_id = 0
-                block_data = self.load_block(obj_to_send, total_cntr)
-                if total_cntr >= pocet_fragmentov:
+            if block_id >= self.velkost_bloku or total_cntr >= pocet_fragmentov:  # koniec bloku
+                self.recv_data_confirmation(block_data, pocet_fragmentov)  # potvrd blok
+                block_id = 0  # reset countera
+                block_data = self.load_block(obj_to_send, total_cntr)  # nacitanie dalsieho
+                if total_cntr >= pocet_fragmentov:  # koniec odosielania ak sme poslali vsetky
                     break
             print(f"Posielam block_id:{block_id+1}/{self.velkost_bloku}.")
             raw_data = block_data[block_id]
@@ -130,6 +133,7 @@ class Client(Uzol):
 
         self.close_obj(obj_to_send)
 
+    # odosle INIT spravu podla vstupu
     def send_info(self, typ, pocet):
         self.send_data(typ, pocet, "=cI", None, self.constants.BEZ_CHYBY)
         try:
@@ -151,6 +155,7 @@ class Client(Uzol):
             self.send_info(("INIT", "DM"), self.pocet_fragmentov_data)
             self.send_fragments("DM", self.pocet_fragmentov_data)
 
+    # Three-Way Handshake
     def nadviaz_spojenie(self):
         try:
             self.send_simple("SYN", self.target)
@@ -164,11 +169,13 @@ class Client(Uzol):
             raise
         self.logger.log("Spojenie nadviazane.\n", 1)
 
+    # Ukoncenie spojenia
     def send_fin(self):
         print("Vypinam KeepAlive a ukoncujem spojenie..")
         self.send_simple("FIN", self.target)
         self.recv_simple("ACK", self.recv_buffer)
 
+    # Udrziavanie spojenia otvorene
     def send_ka(self):
         self.logger.log("SPUSTAM KEEP ALIVE KAZDYCH 10 SEC", 1)
         self.sock.settimeout(2)
@@ -176,15 +183,15 @@ class Client(Uzol):
         start = time.time()
         while True:
             try:
-                if self.ka and time.time() - start > 10:
+                if self.ka and time.time() - start > self.KA_cycle:  # KA je aktivne a preslo 10 sec.
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
-                    start = time.time()
+                    start = time.time()  # reset timera
                 elif self.ka is False:
                     self.logger.log("VYPINAM KEEP ALIVE", 1)
                     return 0
             except (socket.timeout, ConnectionResetError):
-                if self.ka is False:
+                if self.ka is False:  # KA bolo uz vypnute ked vyprsal timer
                     return 0
                 print("\nNedostal potvrdenie na KA. Posielam opatovne.")
                 self.sock.settimeout(2)
@@ -192,7 +199,7 @@ class Client(Uzol):
                     self.send_simple("KA", self.target)
                     self.recv_simple("ACK", self.recv_buffer)
                     start = time.time()
-                except (socket.timeout, ConnectionResetError):
+                except (socket.timeout, ConnectionResetError):  # este jeden pokus.
                     print("\nNeodstal ani opatovne potvrdenie. Vypinam keep alive a ukoncujem spojenie.")
                     self.ka = False
                     return 1

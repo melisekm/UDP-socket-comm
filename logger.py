@@ -1,8 +1,8 @@
 class Logger:
     def __init__(self, constants, integrity):
-        self.constants = constants
+        self.constants = constants # referencia na triedu konstant
         self.integrity = integrity
-        self.print = True
+        self.print = True # ci sa vobec ma nieco vypisovat
 
     def get_send_sizes(self, data, level):
         if data is not None:  # je to DATA message

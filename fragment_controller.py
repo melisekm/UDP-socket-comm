@@ -3,14 +3,14 @@ import math
 
 class FragmentController:
     def __init__(self, pocet_fragmentov, velkost_bloku):
-        self.good_fragments = 0
-        self.good_block_len = 0
-        self.block_counter = 0
-        self.block_data = [None] * pocet_fragmentov
-        self.pocet_fragmentov = pocet_fragmentov
-        self.posledny_block_size = math.ceil(pocet_fragmentov % velkost_bloku)
-        self.DOPLN_POSLEDNY = 2
-        self.timeout = False
+        self.good_fragments = 0 # celkovy pocet prijatych fragmentov, ktore boli v poriadku a budu zapisane
+        self.good_block_len = 0 # pocet spravne prijatych fragmentov v danom bloku
+        self.block_counter = 0 # pocet prijatych fragmentov v danom bloku(aj spravne aj nespravne)
+        self.block_data = [None] * pocet_fragmentov # data, ktore budu zapisane
+        self.pocet_fragmentov = pocet_fragmentov # celkovy pocet ocakavanych fragmentov
+        self.posledny_block_size = math.ceil(pocet_fragmentov % velkost_bloku) # vypocet velkosti posledneho bloku
+        self.DOPLN_POSLEDNY = 2 # znaci ze v poslednom bloku chybaju data
+        self.timeout = False # nastal timeout, urcite potrebujeme doplnit
 
     def reset(self):
         self.good_block_len = 0

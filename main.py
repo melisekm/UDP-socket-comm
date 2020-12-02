@@ -3,7 +3,7 @@ from client import Client
 from server import Server
 
 if __name__ == "__main__":
-    crc = utils.Crc()
+    crc = utils.Crc() # instancia CRC funkcie
     constants = utils.Constants()
     while True:
         vstup = input("[client]/[server]/[quit]:")

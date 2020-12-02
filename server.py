@@ -9,10 +9,11 @@ from fragment_controller import FragmentController
 class Server(Uzol):
     def __init__(self, crc, constants, path, port):
         super().__init__(crc, constants)
-        self.path = path
-        self.sock.bind(("localhost", port))
-        # self.sock.bind(("192.168.100.10", port))
+        self.path = path  # cesta kam sa budu ukladat data
+        self.sock.bind(("localhost", port))  # explicitne zadane pocuvanie na localhoste
+        # self.sock.bind((socket.gethostbyname(socket.gethostname()), port))
 
+    # po tom ako sa prijmu vsetky segmenty, tak ich zapise
     def zapis_data(self, nazov_suboru, udaje):
         if nazov_suboru is None:
             print(f"Sprava prijata.\n{'*'*50}")
@@ -30,22 +31,27 @@ class Server(Uzol):
         self.sock.settimeout(20)
         print("Prechadzam do passive modu.")
 
+    # odosle NACK signal s poctom a ID chybajucich paketov
     def send_nack(self, bad_count, corrupted_ids):
         self.send_data("NACK", bad_count, "=cI", corrupted_ids, self.constants.BEZ_CHYBY)
 
+    # na zaklade prijatych paketov vypocita, ktore chybaju a formatuje ich na X,Y,Z
     def get_corrupted_ids(self, f_info, dopln):
         corrupted_ids = ""
         zaciatok_bloku = f_info.good_fragments - f_info.good_block_len
         koniec_bloku = (
-            zaciatok_bloku + self.velkost_bloku if dopln != self.constants.DOPLN else zaciatok_bloku + f_info.posledny_block_size
+            zaciatok_bloku + self.velkost_bloku
+            if dopln != self.constants.DOPLN
+            else zaciatok_bloku + f_info.posledny_block_size
         )
         dlzka = 0
         for idx in range(zaciatok_bloku, koniec_bloku):
             if f_info.block_data[idx] is None:
                 corrupted_ids += str(idx) + ","
                 dlzka += 1
-        return corrupted_ids[:-1], dlzka
+        return corrupted_ids[:-1], dlzka  # vrati aj dlzku
 
+    # vypocita, ktore fragmenty chybaju, posle NACK, a znovuprijate zapise do zoznamu dobrych
     def obtain_corrupted(self, f_info, dopln):
         corrupted_ids, bad_count = self.get_corrupted_ids(f_info, dopln)
         self.logger.log(f"Ich ID su:{[int(x)+1 for x in corrupted_ids.split(',')]}", 5)
@@ -60,6 +66,7 @@ class Server(Uzol):
 
                 if self.process_fragment(recvd_data, [self.typ], f_info) == 1:  # neocakavany typ, ina chyba
                     continue
+
                 f_info.good_fragments += 1  # VSETKY
                 f_info.good_block_len += 1  # OK V BLOKU
                 print(f"Celkovo SPRAVNYCH dostal:{f_info.good_fragments}/{f_info.pocet_fragmentov}\n")
@@ -68,6 +75,7 @@ class Server(Uzol):
             return 1
         return 0
 
+    # skontroluje ci sa nejedna o koniec bloku a ci je potrebne doplnit/zapisat data
     def skontroluj_block(self, f_info):
         zapis, dopln = f_info.check_block(self.velkost_bloku)
         if dopln:
@@ -83,6 +91,7 @@ class Server(Uzol):
             f_info.reset()
             self.send_simple("ACK", self.target)
 
+    # spracovanie prijateho segmentu
     def process_fragment(self, recvd_data, expected_types, f_info):
         unpacked_type = struct.unpack("=c", recvd_data[0:1])[0]  # 1B type
         recvd_types = self.get_type(unpacked_type, recvd_data)
@@ -92,13 +101,16 @@ class Server(Uzol):
         unpacked_id = struct.unpack("=I", recvd_data[1 : self.constants.DATA_HEADER_LEN])[0]  # 4B fragment_id
         fragment_id = unpacked_id
         if f_info.block_data[fragment_id] is not None:
-            self.logger.log(f"RETRANSMISSION.Fragment: {fragment_id + 1}/{f_info.pocet_fragmentov} prisiel ZNOVU.", 1)
+            self.logger.log(
+                f"RETRANSMISSION.Fragment: {fragment_id + 1}/{f_info.pocet_fragmentov} prisiel ZNOVU.", 1
+            )
             return 1
         raw_data = recvd_data[self.constants.DATA_HEADER_LEN : -2]  # vsetko ostane az po CRC
         f_info.block_data[fragment_id] = raw_data  # zapis na korektne miesto
         print(f"Fragment: {(fragment_id % self.velkost_bloku) + 1}/{self.velkost_bloku} prisiel v poriadku.")
         return 0
 
+    # hlavna funkcia na prijimanie segmentov
     def recv_fragments(self, typ, pocet_fragmentov):
         self.typ = typ
         f_info = FragmentController(pocet_fragmentov, self.velkost_bloku)
@@ -121,7 +133,7 @@ class Server(Uzol):
             except socket.timeout:
                 print(f"Cas vyprsal pri fragmentID:{f_info.block_counter}")
                 print(f"Celkovo:{f_info.good_fragments}/{f_info.pocet_fragmentov}")
-                try:
+                try:  # vyprsal timer a je potrebne vyziadat data
                     f_info.timeout = True
                     self.skontroluj_block(f_info)
                     f_info.timeout = False
@@ -129,6 +141,7 @@ class Server(Uzol):
                     print("Vyprsal cas pri opatovnom ziadani.")
                     raise
 
+        # po prijati vsetkych segmentov dekoduje spravu
         if self.typ == "DM":
             res = ""
             for data in f_info.block_data:
@@ -136,11 +149,12 @@ class Server(Uzol):
             return res
         return f_info.block_data
 
+    # hlavne razcestie po nadviazani komunikacie, INIT pokracuje dalej, KA nemeni stav, FIN ukoncuje
     def recv_info(self):
         while True:
             recvd_data = self.recvfrom()
             if recvd_data is None:
-                self.logger.log("Prijal Neznamy pkt_chksum_err", 1)
+                self.logger.log("Prijal neznamy chybny paket.", 1)
                 return (None, None)
             unpacked_hdr = struct.unpack("=c", recvd_data[:1])[0]
             types = self.get_type(unpacked_hdr, recvd_data)
@@ -161,6 +175,7 @@ class Server(Uzol):
                 self.logger.log("Prijal nieco uplne ine...", 1)
         return None, None
 
+    # mod prijimania dat, na zaklade typu z infa pokracuje dalej
     def recv_data(self):
         while True:
             mod, pocet_fragmentov = self.recv_info()
@@ -184,6 +199,7 @@ class Server(Uzol):
             elif mod == "FIN":
                 break
 
+    # Three-Way Handshake
     def nadviaz_spojenie(self):
         try:
             self.recv_simple("SYN", self.recv_buffer)
